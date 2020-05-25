@@ -4,7 +4,7 @@ use crate::ics04_channel::events as ChannelEvents;
 use crate::ics20_fungible_token_transfer::events as TransferEvents;
 use serde_derive::{Deserialize, Serialize};
 use std::convert::TryFrom;
-use tendermint::rpc::event_listener::Event;
+use tendermint::rpc::event_listener::ResultEvent;
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub enum IBCEvent {
@@ -29,7 +29,7 @@ pub enum IBCEvent {
 
 
 impl IBCEvent {
-    pub fn get_all_events(event: Event) -> Vec<IBCEvent> {
+    pub fn get_all_events(event: ResultEvent) -> Vec<IBCEvent> {
         let mut vals: Vec<IBCEvent> = vec![];
         if let Ok(ev) = ClientEvents::CreateClient::try_from(&event) {
             vals.push(IBCEvent::from(ev));
@@ -178,6 +178,16 @@ impl From<TransferEvents::Packet> for IBCEvent {
     }
 }
 
+pub fn extract_events(result: &ResultEvent, action_string: &str)->Result<std::collections::HashMap<String,Vec<String>>,Box<dyn std::error::Error>>{
+    if let Some(ref events) = result.events {
+    if let Some(message_action) = events.get("message.action") {
+        if message_action.contains(&action_string.to_owned()) {
+            return Ok(events.clone());
+        }
+}
+    }
+    Err("Incorrect Event Type".into())
+}
 #[macro_export]
 macro_rules! make_event {
     ($a:ident, $b:literal) => {
@@ -185,22 +195,10 @@ macro_rules! make_event {
         pub struct $a {
             pub data: std::collections::HashMap<String, Vec<String>>,
         }
-        impl TryFrom<&Event> for $a {
-            type Error = Box<dyn Error>;
-            fn try_from(event: &Event) -> Result<Self, Self::Error> {
-                match event {
-                    Event::JsonRPCTransactionResult { 0: ref data } => Ok($a {
-                        data: data.extract_events($b)?.clone(),
-                    }),
-                    Event::GenericJSONEvent { .. } => {
-                        Err("Expected JSON representing a $a, got wrong Generic Json Event")?
-                    },
-                    Event::JsonRPCBlockResult { .. } => {
-                        Err("Expected JSON representing a $a, got wrong Block Result")?
-                    }
-
-                    Event::GenericStringEvent { .. } => Err("Generic event is not of $a".into()),
-                }
+        impl TryFrom<&ResultEvent> for $a {
+            type Error = Box<dyn std::error::Error>;
+            fn try_from(result: &ResultEvent) -> Result<Self, Self::Error> {
+                Ok($a {data:crate::events::extract_events(result,$b)?.clone()})
             }
         }
     };

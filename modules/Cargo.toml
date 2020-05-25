@@ -17,7 +17,7 @@ paths-cosmos = []
 paths-ics = []
 
 [dependencies]
-tendermint = { git = "https://github.com/iqlusioninc/tendermint-rs.git", branch = "zaki-event-subscribe" }
+tendermint = { git = "https://github.com/informalsystems/tendermint-rs.git", branch = "master" }
 
 anomaly = "0.2.0"
 thiserror = "1.0"

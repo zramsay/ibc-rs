@@ -19,7 +19,7 @@ mod ibc_events {
         .unwrap()
     }
 
-    /// Create Client event
+    /// Create Client qevent
     #[tokio::test]
     // #[ignore]
     async fn test_create_client_event() {
@@ -28,16 +28,27 @@ mod ibc_events {
 
         let mut x: i32 = 0;
         loop {
-            let events = IBCEvent::get_all_events(client.get_event().await.unwrap());
-            if events.len() != 0 {
-                dbg!(events);
-                break;
-            }
+                match client.get_event().await{
+                    Ok(Some(y)) =>{
+                        let events = IBCEvent::get_all_events(y);
+                        if events.len() != 0 {
+                            dbg!(events);
+                        }
 
-            if x == 10 {
-                panic!("No Create Client Event found")
-            }
-            x += 1;
+                        x += 1;
+            
+                    },
+                    Err(z)=>{
+                        
+                        dbg!(z);
+                        x +=1;
+                    }
+                    _=>{},
+
+                }
+                    if x == 50 {
+                        panic!("No Create Client Event found")
+                    }
         }
     }
 }
