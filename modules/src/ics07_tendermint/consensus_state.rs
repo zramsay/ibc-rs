@@ -5,8 +5,8 @@ use serde_derive::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ConsensusState {
-    root: CommitmentRoot,
-    height: crate::Height,
+    pub root: CommitmentRoot,
+    pub height: crate::Height,
     timestamp: tendermint::time::Time,
     validator_set: tendermint::validator::Set,
 }

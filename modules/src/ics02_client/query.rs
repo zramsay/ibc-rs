@@ -151,6 +151,7 @@ where
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct ConsensusStateResponse<CS> {
     pub consensus_state: CS,
     pub proof: Option<CommitmentProof>,

@@ -39,6 +39,7 @@ pub trait Path: Sized {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct ConnectionPath {
     pub connection_id: ConnectionId,
 }
@@ -55,6 +56,7 @@ impl Path for ConnectionPath {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct ConsensusStatePath {
     pub client_id: ClientId,
     pub height: Height,
@@ -88,6 +90,7 @@ impl Path for ClientStatePath {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct ChannelPath {
     pub port_id: PortId,
     channel_id: ChannelId,

@@ -49,6 +49,7 @@ impl IbcQuery for QueryConnection {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
 pub struct ConnectionResponse {
     pub connection: IdentifiedConnectionEnd,
     pub proof: Option<CommitmentProof>,
@@ -90,7 +91,7 @@ impl IbcResponse<QueryConnection> for ConnectionResponse {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct IdentifiedConnectionEnd {
     connection_end: ConnectionEnd,
     connection_id: ConnectionId,

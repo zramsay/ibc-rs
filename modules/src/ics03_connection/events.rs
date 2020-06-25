@@ -12,6 +12,7 @@ pub struct OpenInit {
     pub height: block::Height,
     pub connection_id: ConnectionId,
     pub client_id: ClientId,
+    pub counterparty_connection_id: ConnectionId,
     pub counterparty_client_id: ClientId,
 }
 
@@ -21,8 +22,12 @@ impl TryFrom<RawObject> for OpenInit {
         Ok(OpenInit {
             height: obj.height,
             connection_id: attribute!(obj, "connection_open_init.connection_id"),
-            client_id: attribute!(obj, "connection_open_init.counterparty_client_id"),
-            counterparty_client_id: attribute!(obj, "connection_open_init.client_id"),
+            client_id: attribute!(obj, "connection_open_init.client_id"),
+            counterparty_connection_id: attribute!(
+                obj,
+                "connection_open_init.counterparty_connection_id"
+            ),
+            counterparty_client_id: attribute!(obj, "connection_open_init.counterparty_client_id"),
         })
     }
 }
@@ -38,6 +43,7 @@ pub struct OpenTry {
     pub height: block::Height,
     pub connection_id: ConnectionId,
     pub client_id: ClientId,
+    pub counterparty_connection_id: ConnectionId,
     pub counterparty_client_id: ClientId,
 }
 
@@ -47,8 +53,12 @@ impl TryFrom<RawObject> for OpenTry {
         Ok(OpenTry {
             height: obj.height,
             connection_id: attribute!(obj, "connection_open_try.connection_id"),
-            client_id: attribute!(obj, "connection_open_try.counterparty_client_id"),
-            counterparty_client_id: attribute!(obj, "connection_open_try.client_id"),
+            client_id: attribute!(obj, "connection_open_try.client_id"),
+            counterparty_connection_id: attribute!(
+                obj,
+                "connection_open_try.counterparty_connection_id"
+            ),
+            counterparty_client_id: attribute!(obj, "connection_open_try.counterparty_client_id"),
         })
     }
 }
@@ -59,7 +69,7 @@ impl From<OpenTry> for IBCEvent {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, Clone)]
+#[derive(Debug, Deserialize, Serialize, Clone, PartialEq, Eq, Hash)]
 pub struct OpenAck {
     pub height: block::Height,
     pub connection_id: ConnectionId,

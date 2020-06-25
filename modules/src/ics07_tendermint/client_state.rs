@@ -13,7 +13,7 @@ pub struct ClientState {
     trusting_period: Duration,
     unbonding_period: Duration,
     frozen_height: crate::Height,
-    latest_header: Header,
+    pub latest_header: Header,
 }
 
 impl ClientState {

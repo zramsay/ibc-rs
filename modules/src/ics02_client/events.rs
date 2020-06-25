@@ -8,6 +8,7 @@ use anomaly::BoxError;
 use serde_derive::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use tendermint::block;
+use tracing::debug;
 
 // TODO - find a better place for NewBlock
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -32,6 +33,7 @@ pub struct CreateClient {
     pub height: block::Height,
     pub client_id: ClientId,
     pub client_type: ClientType,
+    pub client_height: block::Height,
 }
 
 impl TryFrom<RawObject> for CreateClient {
@@ -41,6 +43,7 @@ impl TryFrom<RawObject> for CreateClient {
             height: obj.height,
             client_id: attribute!(obj, "create_client.client_id"),
             client_type: attribute!(obj, "create_client.client_type"),
+            client_height: attribute!(obj, "create_client.client_height"),
         })
     }
 }
@@ -56,15 +59,18 @@ pub struct UpdateClient {
     pub height: block::Height,
     pub client_id: ClientId,
     pub client_type: ClientType,
+    pub client_height: block::Height,
 }
 
 impl TryFrom<RawObject> for UpdateClient {
     type Error = BoxError;
     fn try_from(obj: RawObject) -> Result<Self, Self::Error> {
+        debug!("extracting UpdateClient from {:?}", obj);
         Ok(UpdateClient {
             height: obj.height,
             client_id: attribute!(obj, "update_client.client_id"),
             client_type: attribute!(obj, "update_client.client_type"),
+            client_height: attribute!(obj, "update_client.client_height"),
         })
     }
 }
@@ -80,6 +86,7 @@ pub struct ClientMisbehavior {
     pub height: block::Height,
     pub client_id: ClientId,
     pub client_type: ClientType,
+    pub client_height: block::Height,
 }
 
 impl TryFrom<RawObject> for ClientMisbehavior {
@@ -89,6 +96,7 @@ impl TryFrom<RawObject> for ClientMisbehavior {
             height: obj.height,
             client_id: attribute!(obj, "client_misbehaviour.client_id"),
             client_type: attribute!(obj, "client_misbehaviour.client_type"),
+            client_height: attribute!(obj, "client_misbehaviour.client_height"),
         })
     }
 }
