@@ -126,7 +126,7 @@ where
         light_client_request_tx: Sender<LightClientQuery>,
         light_client_response_rx: Receiver<LightClientQuerierResponse>,
     ) -> Self {
-        let mut res = EventHandler {
+        EventHandler {
             relay,
             config: config.clone(),
             chain_ev_rx,
@@ -135,14 +135,7 @@ where
             light_client_request_tx,
             light_client_response_rx,
             relayer_state: RelayerState::new(config.clone()),
-        };
-        if !relay {
-            //return res;
         }
-        for chain_config in &config.chains {
-            res.relayer_state.add_chain(chain_config);
-        }
-        res
     }
 
     ///Event Handler loop
@@ -155,19 +148,19 @@ where
                         info!("Chain {} pushed {}", events.0, event.to_json());
                         //continue;
                     }
-                    let _handle = self.handle(RelayerEvent::ChainEvent(ChainEvent {
+                    let _handle = self.event_handler(RelayerEvent::ChainEvent(ChainEvent {
                         from_chain: events.0,
                         event,
                     }));
                 }
             }
             if let Some(event) = self.query_response_rx.recv().await {
-                let _handle = self.handle(RelayerEvent::QueryEvent(event));
+                let _handle = self.event_handler(RelayerEvent::QueryEvent(event));
             }
         }
     }
 
-    async fn handle(&mut self, event: RelayerEvent<CS>)
+    async fn event_handler(&mut self, event: RelayerEvent<CS>)
     where
         CS: ConsensusState,
     {
@@ -194,7 +187,7 @@ where
         from: ChainId,
         cc: ClientEvents::CreateClient,
     ) -> Result<(), BoxError> {
-        self.relayer_state.create_client_update(from, cc)
+        self.relayer_state.create_client_handler(from, cc)
     }
 
     fn update_client_handler(
@@ -202,7 +195,7 @@ where
         from: ChainId,
         uc: ClientEvents::UpdateClient,
     ) -> Result<(), BoxError> {
-        self.relayer_state.update_client_update(from, uc)
+        self.relayer_state.update_client_handler(from, uc)
     }
 
     async fn query_response_handler(
@@ -266,7 +259,7 @@ where
         Ok(())
     }
 
-    async fn conn_handler(
+    async fn connection_handler(
         &mut self,
         from_chain: ChainId,
         height: block::Height,
@@ -275,9 +268,9 @@ where
     ) -> Result<(), BoxError> {
         // Call the main relayer state handler
         // TODO - check that realyer should relay between the chains and for this connection
-        let requests = self
-            .relayer_state
-            .conn_update(from_chain, height, state, conn.clone())?;
+        let requests =
+            self.relayer_state
+                .connection_handler(from_chain, height, state, conn.clone())?;
 
         self.send_builder_requests(
             BuilderTrigger {
@@ -296,7 +289,7 @@ where
             IBCEvent::CreateClient(cc) => self.create_client_handler(n.from_chain, cc)?,
             IBCEvent::UpdateClient(uc) => self.update_client_handler(n.from_chain, uc)?,
             IBCEvent::OpenInitConnection(oi) => {
-                self.conn_handler(
+                self.connection_handler(
                     n.from_chain,
                     oi.height,
                     State::Init,

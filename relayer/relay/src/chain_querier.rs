@@ -80,7 +80,7 @@ pub enum QueryResponse<CS> {
     ConnectionEndResponse(ConnectionResponse),
 }
 
-pub fn matching_req_resp<CS>(req: &QueryRequest, resp: &QueryResponse<CS>) -> bool {
+fn matching_req_resp<CS>(req: &QueryRequest, resp: &QueryResponse<CS>) -> bool {
     match (req, resp) {
         (
             QueryRequest::ClientConsensusRequest(cons_req),
@@ -94,6 +94,19 @@ pub fn matching_req_resp<CS>(req: &QueryRequest, resp: &QueryResponse<CS>) -> bo
 
         (_, _) => false,
     }
+}
+
+pub(crate) fn valid_query_response<CS>(
+    response: &QueryResponse<CS>,
+    queries: &[QueryRequest],
+) -> bool {
+    for req in queries {
+        if !matching_req_resp(req, &response) {
+            continue;
+        }
+        return true;
+    }
+    false
 }
 
 /// The Querier handles IBC events from the monitors.

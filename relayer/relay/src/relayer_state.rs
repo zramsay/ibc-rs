@@ -1,5 +1,5 @@
 use crate::chain_querier::{
-    matching_req_resp, QueryClientConsensus, QueryConnectionEnd, QueryRequest, QueryResponse,
+    valid_query_response, QueryClientConsensus, QueryConnectionEnd, QueryRequest, QueryResponse,
 };
 use crate::config::{ChainConfig, Config};
 use crate::event_handler::{BuilderObject, BuilderTrigger, ConnectionEventObject};
@@ -13,8 +13,10 @@ use relayer_modules::ics24_host::identifier::ClientId;
 use std::collections::HashMap;
 use tendermint::block::Height;
 
+const MAX_HEIGHT_GAP: u64 = 100;
+
 #[derive(Debug, Clone)]
-pub struct BuilderRequests {
+pub(crate) struct BuilderRequests {
     // queries
     pub src_queries: Vec<QueryRequest>,
     pub dest_queries: Vec<QueryRequest>,
@@ -53,7 +55,6 @@ pub struct MessageBuilder<CS> {
 
     // wait for src chain to get to src_height
     src_height_needed: Height,
-    src_height_waiting: bool,
 
     // pending queries
     src_queries: Vec<QueryRequest>,
@@ -79,7 +80,6 @@ impl<CS> MessageBuilder<CS> {
             src_height,
             dest_chain,
             src_height_needed: Height::from(0),
-            src_height_waiting: true,
             src_queries: vec![],
             src_responses: vec![],
             dest_queries: vec![],
@@ -101,7 +101,7 @@ struct ChainData {
 }
 
 impl ChainData {
-    pub fn new(config: &ChainConfig) -> Self {
+    fn new(config: &ChainConfig) -> Self {
         ChainData {
             config: config.clone(),
             height: Height::from(0),
@@ -110,36 +110,23 @@ impl ChainData {
     }
 }
 
-pub struct RelayerState<CS> {
-    config: Config,
+pub(crate) struct RelayerState<CS> {
     chain_states: HashMap<ChainId, ChainData>,
     /// Message Builder, key is the trigger event, value shows the state of event processing
     message_builders: HashMap<BuilderTrigger, MessageBuilder<CS>>,
 }
 
-const MAX_HEIGHT_GAP: u64 = 100;
-
-pub fn valid_query_response<CS>(response: &QueryResponse<CS>, queries: &[QueryRequest]) -> bool {
-    for req in queries {
-        if !matching_req_resp(req, &response) {
-            continue;
-        }
-        return true;
-    }
-    false
-}
-
 impl<CS> RelayerState<CS> {
-    pub fn new(config: Config) -> Self {
-        RelayerState {
-            config,
+    pub(crate) fn new(config: Config) -> Self {
+        let mut res = RelayerState {
             chain_states: HashMap::new(),
             message_builders: HashMap::new(),
-        }
-    }
+        };
 
-    pub fn add_chain(&mut self, chain: &ChainConfig) {
-        self.chain_states.insert(chain.id, ChainData::new(chain));
+        for chain in &config.chains {
+            res.chain_states.insert(chain.id, ChainData::new(chain));
+        }
+        res
     }
 
     pub fn new_block_update(&mut self, source: ChainId, nb: NewBlock) -> Result<(), BoxError> {
@@ -166,91 +153,7 @@ impl<CS> RelayerState<CS> {
         Ok(())
     }
 
-    pub fn create_client_update(
-        &mut self,
-        source: ChainId,
-        cc: ClientEvents::CreateClient,
-    ) -> Result<(), BoxError> {
-        *self
-            .chain_states
-            .get_mut(&source)
-            .ok_or("unknown chain")?
-            .client_heights
-            .entry(cc.client_id)
-            .or_insert_with(|| Height::from(0)) = cc.client_height;
-        Ok(())
-    }
-
-    pub(crate) fn update_client_update(
-        &mut self,
-        source: ChainId,
-        cu: ClientEvents::UpdateClient,
-    ) -> Result<(), BoxError> {
-        *self
-            .chain_states
-            .get_mut(&source)
-            .ok_or("unknown chain")?
-            .client_heights
-            .entry(cu.client_id)
-            .or_insert_with(|| Height::from(0)) = cu.client_height;
-        Ok(())
-    }
-
-    /// get the height of client on a chain
-    fn client_height(&mut self, ch: ChainId, client_id: ClientId) -> Result<Height, BoxError> {
-        Ok(self
-            .chain_states
-            .get(&ch)
-            .ok_or("unknown chain")?
-            .client_heights[&client_id])
-    }
-
-    /// get the latest chain height
-    fn latest_chain_height(&mut self, ch: ChainId) -> Result<Height, BoxError> {
-        Ok(self.chain_states.get(&ch).ok_or("unknown chain")?.height)
-    }
-
-    fn chain_from_client(&mut self, client_id: ClientId) -> Result<ChainId, BoxError> {
-        Ok(self
-            .config
-            .chains
-            .iter()
-            .find(|c| {
-                c.client_ids
-                    .iter()
-                    .any(|cl| client_id == cl.parse().unwrap())
-            })
-            .ok_or_else(|| "missing client in configuration".to_string())?
-            .id)
-    }
-
-    fn get_message_builder(&mut self, key: &BuilderTrigger) -> Option<&mut MessageBuilder<CS>> {
-        self.message_builders.get_mut(key)
-    }
-
-    fn remove_message_builder(&mut self, key: &BuilderTrigger) -> Option<MessageBuilder<CS>> {
-        self.message_builders.remove(key)
-    }
-
-    fn duplicate_message_builder_handler(
-        &mut self,
-        key: &BuilderTrigger,
-        state: BuilderState,
-        height: Height,
-    ) -> bool {
-        if let Some(existing_mb) = self.get_message_builder(key) {
-            if existing_mb.state >= state || existing_mb.src_height > height {
-                return true;
-            }
-            // A new event with the object in a "higher" state is received
-            // Cancel old message builder by removing it from the state.
-            // Any pending request responses will be discarded
-            self.remove_message_builder(&key);
-        }
-        false
-    }
-
-    pub fn query_response_handler(
+    pub(crate) fn query_response_handler(
         &mut self,
         from_chain: ChainId,
         trigger: BuilderTrigger,
@@ -271,7 +174,39 @@ impl<CS> RelayerState<CS> {
         Err("No matching message builder for query response".into())
     }
 
-    pub fn conn_update(
+    // TODO - this should become client_handler(), i.e. merge the create and update once
+    // the events are reorg-ed
+    pub(crate) fn create_client_handler(
+        &mut self,
+        source: ChainId,
+        cc: ClientEvents::CreateClient,
+    ) -> Result<(), BoxError> {
+        *self
+            .chain_states
+            .get_mut(&source)
+            .ok_or("unknown chain")?
+            .client_heights
+            .entry(cc.client_id)
+            .or_insert_with(|| Height::from(0)) = cc.client_height;
+        Ok(())
+    }
+
+    pub(crate) fn update_client_handler(
+        &mut self,
+        source: ChainId,
+        cu: ClientEvents::UpdateClient,
+    ) -> Result<(), BoxError> {
+        *self
+            .chain_states
+            .get_mut(&source)
+            .ok_or("unknown chain")?
+            .client_heights
+            .entry(cu.client_id)
+            .or_insert_with(|| Height::from(0)) = cu.client_height;
+        Ok(())
+    }
+
+    pub(crate) fn connection_handler(
         &mut self,
         src_chain: ChainId,
         height: Height,
@@ -322,23 +257,7 @@ impl<CS> RelayerState<CS> {
         self.message_builder_next_step(key)
     }
 
-    pub fn get_mb_src_chain(&mut self, key: BuilderTrigger) -> Result<ChainId, BoxError> {
-        Ok(self
-            .message_builders
-            .get_mut(&key)
-            .ok_or("Invalid chain")?
-            .src_chain)
-    }
-
-    pub fn get_mb_dest_chain(&mut self, key: BuilderTrigger) -> Result<ChainId, BoxError> {
-        Ok(self
-            .message_builders
-            .get_mut(&key)
-            .ok_or("Invalid chain")?
-            .dest_chain)
-    }
-
-    pub fn message_builder_next_step(
+    pub(crate) fn message_builder_next_step(
         &mut self,
         key: BuilderTrigger,
     ) -> Result<BuilderRequests, BoxError> {
@@ -361,7 +280,7 @@ impl<CS> RelayerState<CS> {
         if Height::from(dest_client_on_src_height.value() + MAX_HEIGHT_GAP) <= dest_chain_height
             && mb.dest_client_request.is_none()
         {
-            // request new header(s) from local light client for destination chan
+            // build request for new header(s) from local light client for destination chain
             mb.dest_client_request = Option::from(LightClientRequest::ConsensusStateUpdateRequest(
                 ConsensusStateUpdateRequestParams::new(
                     mb.dest_chain,
@@ -425,5 +344,75 @@ impl<CS> RelayerState<CS> {
             src_client_request: mb.src_client_request.clone(),
             dest_client_request: mb.dest_client_request.clone(),
         })
+    }
+
+    /// get the height of client on a chain
+    fn client_height(&mut self, ch: ChainId, client_id: ClientId) -> Result<Height, BoxError> {
+        Ok(self
+            .chain_states
+            .get(&ch)
+            .ok_or("unknown chain")?
+            .client_heights[&client_id])
+    }
+
+    /// get the latest chain height
+    fn latest_chain_height(&mut self, ch: ChainId) -> Result<Height, BoxError> {
+        Ok(self.chain_states.get(&ch).ok_or("unknown chain")?.height)
+    }
+
+    fn chain_from_client(&mut self, client_id: ClientId) -> Result<ChainId, BoxError> {
+        Ok(*self
+            .chain_states
+            .iter()
+            .find(|c| {
+                c.1.config
+                    .client_ids
+                    .iter()
+                    .any(|cl| client_id == cl.parse().unwrap())
+            })
+            .ok_or_else(|| "missing client in configuration".to_string())?
+            .0)
+    }
+
+    fn get_message_builder(&mut self, key: &BuilderTrigger) -> Option<&mut MessageBuilder<CS>> {
+        self.message_builders.get_mut(key)
+    }
+
+    fn remove_message_builder(&mut self, key: &BuilderTrigger) -> Option<MessageBuilder<CS>> {
+        self.message_builders.remove(key)
+    }
+
+    fn duplicate_message_builder_handler(
+        &mut self,
+        key: &BuilderTrigger,
+        state: BuilderState,
+        height: Height,
+    ) -> bool {
+        if let Some(existing_mb) = self.get_message_builder(key) {
+            if existing_mb.state >= state || existing_mb.src_height > height {
+                return true;
+            }
+            // A new event with the object in a "higher" state is received
+            // Cancel old message builder by removing it from the state.
+            // Any pending request responses will be discarded
+            self.remove_message_builder(&key);
+        }
+        false
+    }
+
+    fn get_mb_src_chain(&mut self, key: BuilderTrigger) -> Result<ChainId, BoxError> {
+        Ok(self
+            .message_builders
+            .get_mut(&key)
+            .ok_or("Invalid chain")?
+            .src_chain)
+    }
+
+    fn get_mb_dest_chain(&mut self, key: BuilderTrigger) -> Result<ChainId, BoxError> {
+        Ok(self
+            .message_builders
+            .get_mut(&key)
+            .ok_or("Invalid chain")?
+            .dest_chain)
     }
 }
