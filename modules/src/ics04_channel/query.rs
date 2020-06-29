@@ -11,6 +11,7 @@ use crate::path::{ChannelEndsPath, Path};
 use crate::query::{IbcQuery, IbcResponse};
 use crate::Height;
 
+#[derive(Debug, Clone)]
 pub struct QueryChannel {
     pub chain_height: Height,
     pub port_id: PortId,
@@ -51,6 +52,7 @@ impl IbcQuery for QueryChannel {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct ChannelResponse {
     pub channel: ChannelEnd,
     pub proof: Option<CommitmentProof>,

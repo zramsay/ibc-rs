@@ -33,7 +33,7 @@ where
     Q: IbcQuery,
 {
     if req.trigger != resp.trigger {
-        false
+        return false;
     }
     // TODO - no idea how to match req with resp
     true
@@ -56,7 +56,7 @@ where
     false
 }
 
-/// The Querier handles IBC events from the monitors.
+/// The Querier handles query requests from the event handler.
 pub struct ChainQueryHandler<O, Q>
 where
     O: BuilderObject,
@@ -93,20 +93,17 @@ where
 
         loop {
             if let Some(query) = self.query_request_rx.recv().await {
-                let obj = query.clone().trigger;
-                let query = query.clone().request;
-
                 let response = ibc_query(
                     &TendermintChain::from_config(
                         self.config
                             .chains
                             .iter()
-                            .find(|c| c.id == query.chain)
+                            .find(|c| c.id == query.trigger.chain)
                             .unwrap()
                             .clone(),
                     )
                     .unwrap(),
-                    query,
+                    query.request,
                 )
                 .await
                 .unwrap();
@@ -114,7 +111,7 @@ where
                 let _res = self
                     .query_response_tx
                     .send(ChainQueryResponse {
-                        trigger: obj,
+                        trigger: query.trigger,
                         response,
                     })
                     .await;

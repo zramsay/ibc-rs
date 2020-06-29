@@ -11,6 +11,7 @@ use crate::path::{ConnectionPath, Path};
 use crate::query::{IbcQuery, IbcResponse};
 use crate::Height;
 
+#[derive(Debug, Clone)]
 pub struct QueryConnection {
     pub chain_height: Height,
     pub connection_id: ConnectionId,

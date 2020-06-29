@@ -49,10 +49,10 @@ where
     relayer_state: RelayerState<O, Q>,
 }
 
-impl<O, Q> EventHandler<O, Q>
+impl<O: 'static, Q: 'static> EventHandler<O, Q>
 where
-    O: BuilderObject,
-    Q: IbcQuery,
+    O: BuilderObject + std::marker::Sync,
+    Q: IbcQuery + std::marker::Sync,
 {
     /// Constructor for the Event Handler
     pub fn new(
@@ -111,7 +111,7 @@ where
                     Err(e) => debug!("Handling of event returned {}\n", e),
                 }
             }
-            RelayerEvent::QueryEvent(response) => match self.query_response_handler(response).await
+            RelayerEvent::QueryEvent(response) => match self.query_response_handler(&response).await
             {
                 Ok(()) => debug!("Successful handling of query response\n"),
                 Err(e) => debug!("Handling of query response returned error {:?}\n", e),
@@ -120,11 +120,11 @@ where
         }
     }
 
-    async fn ibc_event_handler(&mut self, n: ChainEvent<O>) -> Result<(), BoxError> {
-        match n.event {
-            BuilderEvent::NewBlock => self.new_block_handler(n)?,
-            BuilderEvent::CreateClient | BuilderEvent::UpdateClient => self.client_handler(n)?,
-            BuilderEvent::ConnectionOpenInit => self.handshake_event_handler(n).await?,
+    async fn ibc_event_handler(&mut self, ev: ChainEvent<O>) -> Result<(), BoxError> {
+        match ev.event {
+            BuilderEvent::NewBlock => self.new_block_handler(ev)?,
+            BuilderEvent::CreateClient | BuilderEvent::UpdateClient => self.client_handler(ev)?,
+            BuilderEvent::ConnectionOpenInit => self.handshake_event_handler(&ev).await?,
 
             _ => {}
         }
@@ -141,16 +141,11 @@ where
 
     async fn query_response_handler(
         &mut self,
-        r: ChainQueryResponse<O, Q>,
+        r: &ChainQueryResponse<O, Q>,
     ) -> Result<(), BoxError> {
-        // TODO - check that realyer should relay between the chains and for this connection
 
-        self.relayer_state
-            .query_response_handler(r.from_chain, r.trigger.clone(), r.response)?;
-
-        let requests = self
-            .relayer_state
-            .message_builder_next_step(r.trigger.clone())?;
+        let requests = self.relayer_state
+            .query_response_handler(r.trigger.chain, r.trigger.clone(), r)?;
 
         self.send_builder_requests(r.trigger.clone(), requests)
             .await?;
@@ -165,19 +160,13 @@ where
         // Send any required queries to Chain or local Light Clients
         for request in requests.src_queries {
             self.query_request_tx
-                .send(ChainQueryRequest {
-                    trigger: trigger.clone(),
-                    request,
-                })
+                .send(request)
                 .await?;
         }
 
         for request in requests.dest_queries {
             self.query_request_tx
-                .send(ChainQueryRequest {
-                    trigger: trigger.clone(),
-                    request,
-                })
+                .send(request)
                 .await?;
         }
 
@@ -201,15 +190,15 @@ where
         Ok(())
     }
 
-    async fn handshake_event_handler(&mut self, n: ChainEvent<O>) -> Result<(), BoxError> {
+    async fn handshake_event_handler(&mut self, ev: &ChainEvent<O>) -> Result<(), BoxError> {
         // Call the main relayer state handler
         // TODO - check that realyer should relay between the chains and for this connection
-        let requests = self.relayer_state.handshake_event_handler(n)?;
+        let requests = self.relayer_state.handshake_event_handler(ev)?;
 
         self.send_builder_requests(
             BuilderTrigger {
-                chain: n.trigger_chain,
-                obj: n.trigger_object,
+                chain: ev.trigger_chain.clone(),
+                obj: ev.trigger_object.clone().ok_or("event with no object")?,
             },
             requests,
         )

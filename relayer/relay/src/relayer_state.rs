@@ -9,22 +9,25 @@ use relayer_modules::ics24_host::identifier::ClientId;
 use relayer_modules::query::{IbcQuery, IbcResponse};
 use std::collections::HashMap;
 use tendermint::block::Height;
+use std::fmt::Debug;
+use std::hash::Hash;
 
-pub(crate) trait BuilderObject: Sized {
+pub(crate) trait BuilderObject: Sized + Debug + Clone + Send + PartialEq + Eq + Hash {
     fn flipped(&self) -> Option<Self> {
         None
     }
     fn client_id(&self) -> ClientId;
     fn client_height(&self) -> Height;
     fn counterparty_client_id(&self) -> ClientId;
-    fn build_ibc_query<T>(&self, height: Height, prove: bool) -> &dyn IbcQuery<Response = T>;
-    fn build_flipped_ibc_query<T>(
-        &self,
-        height: Height,
-        prove: bool,
-    ) -> &dyn IbcQuery<Response = T>;
+//    fn build_ibc_query<T>(&self, height: Height, prove: bool) -> T;
+//    fn build_flipped_ibc_query<T>(
+//        &self,
+//        height: Height,
+//        prove: bool,
+//    ) -> T;
 }
 
+#[derive(Debug, Clone, PartialOrd, PartialEq, Eq, Hash)]
 pub(crate) struct BuilderTrigger<O>
 where
     O: BuilderObject,
@@ -37,11 +40,11 @@ impl<O> BuilderTrigger<O>
 where
     O: BuilderObject,
 {
-    pub fn from_event<E>(ev: ChainEvent<O>) -> Self {
-        BuilderTrigger {
+    pub fn from_event(ev: ChainEvent<O>) -> Result<Self, BoxError> {
+        Ok(BuilderTrigger {
             chain: ev.trigger_chain,
-            obj: ev.trigger_object,
-        }
+            obj: ev.trigger_object.ok_or("event missing object")?,
+        })
     }
 }
 
@@ -64,7 +67,7 @@ impl ChainData {
         }
     }
 }
-
+#[derive(Debug, Clone)]
 pub(crate) struct RelayerState<O, Q>
 where
     O: BuilderObject,
@@ -95,19 +98,6 @@ where
     pub fn new_block_update(&mut self, ev: ChainEvent<O>) -> Result<(), BoxError> {
         // Iterate over all builders in case some were waiting for this new block
         let mut merged_requests = BuilderRequests::new();
-        //        let keys: Vec<BuilderTrigger<O>> = self
-        //            .message_builders
-        //            .iter()
-        //            .map(|(k, _)| k.clone())
-        //            .collect();
-        //        for key in keys {
-        //            match self.message_builder_next_step(key.clone()) {
-        //                Ok(mut requests) => merged_requests.merge(&mut requests),
-        //                Err(_) => {
-        //                    continue;
-        //                }
-        //            }
-        //        }
         if let Some(BuilderEvent::NewBlock) = Some(ev.event) {
             // set the chain's new height
             self.chain_states
@@ -148,19 +138,22 @@ where
         &mut self,
         from_chain: ChainId,
         trigger: BuilderTrigger<O>,
-        response: ChainQueryResponse<O, Q>,
-    ) -> Result<(), BoxError> {
+        response: &ChainQueryResponse<O, Q>,
+    ) -> Result<BuilderRequests<O, Q>, BoxError> {
         if let Some(mb) = self.get_message_builder(&trigger) {
+            let mut requests = BuilderRequests::new();
             if from_chain == mb.event.trigger_chain
                 && valid_query_response(&response, &mb.src_queries)
             {
-                mb.src_responses.push(response);
-                return Ok(());
+                mb.src_responses.push(*response);
+                // TODO - call the message builer handler for response
+                return Ok(requests);
             } else if from_chain == mb.dest_chain
                 && valid_query_response(&response, &mb.dest_queries)
             {
-                mb.dest_responses.push(response);
-                return Ok(());
+                mb.dest_responses.push(*response);
+                // TODO - call the message builer handler for response
+                return Ok(requests);
             }
             return Err("No matching request for query response".into());
         }
@@ -177,23 +170,23 @@ where
                 .client_heights
                 .entry(key.client_id())
                 .or_insert_with(|| Height::from(0)) = key.client_height();
-            Ok(())
+            return Ok(());
         }
         Err("unexpected event".into())
     }
 
     pub(crate) fn handshake_event_handler(
         &mut self,
-        ev: ChainEvent<O>,
+        ev: &ChainEvent<O>,
     ) -> Result<BuilderRequests<O, Q>, BoxError> {
         // get the destination chain from the event
-        let dest_chain = self.chain_from_client(ev.trigger_object.get_trigger_client_id())?;
+        let dest_chain = self.chain_from_client(ev.trigger_object.ok_or("event missing object")?.client_id())?;
 
         // check if a message builder already exists for the object,
         // return if the event is old or for a "lower" state.
         // TODO - do the same check for flipped version
-        let key = BuilderTrigger::from_event(ev);
-        if self.keep_existing_message_builder(&key, &ev) {
+        let key = BuilderTrigger::from_event(ev.clone())?;
+        if self.keep_existing_message_builder(&key, ev) {
             return Err("Received a past event, discard".into());
         }
         // create new message builder, if we are here any old builder should have been removed
@@ -275,7 +268,7 @@ where
             .message_builders
             .get_mut(&key)
             .ok_or("Invalid chain")?
-            .src_chain)
+            .event.trigger_chain)
     }
 
     fn get_mb_dest_chain(&mut self, key: BuilderTrigger<O>) -> Result<ChainId, BoxError> {

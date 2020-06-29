@@ -12,6 +12,7 @@ use crate::path::{ClientStatePath, ConsensusStatePath, Path};
 use crate::query::{IbcQuery, IbcResponse};
 use crate::Height;
 
+#[derive(Debug, Clone)]
 pub struct QueryClientFullState<CLS> {
     pub chain_height: Height,
     pub client_id: ClientId,
@@ -55,6 +56,7 @@ where
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct ClientFullStateResponse<CLS> {
     pub client_state: CLS,
     pub proof: Option<CommitmentProof>,
@@ -101,6 +103,7 @@ fn amino_unmarshal_binary_length_prefixed<T>(_bytes: &[u8]) -> Result<T, error::
     todo!()
 }
 
+#[derive(Debug, Clone)]
 pub struct QueryClientConsensusState<CS> {
     pub chain_height: Height,
     pub client_id: ClientId,

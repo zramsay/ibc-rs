@@ -3,9 +3,10 @@ use tendermint_rpc::endpoint::abci_query::AbciQuery;
 
 use crate::error;
 use crate::Height;
+use std::fmt::Debug;
 
 /// The type of IBC response sent back for a given IBC `Query`.
-pub trait IbcResponse<Query>: Sized {
+pub trait IbcResponse<Query>: Sized + Debug + Clone + Send {
     /// The type of the raw response returned by the interface used to query the chain
     ///
     /// TODO: Uncomment once we abstract over the IBC client
@@ -18,7 +19,7 @@ pub trait IbcResponse<Query>: Sized {
 }
 
 /// Defines an IBC query
-pub trait IbcQuery: Sized {
+pub trait IbcQuery: Sized + Debug + Clone + Send {
     type Response: IbcResponse<Self>;
 
     fn path(&self) -> abci::Path;

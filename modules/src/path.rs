@@ -74,6 +74,7 @@ impl Path for ConsensusStatePath {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct ClientStatePath {
     pub client_id: ClientId,
 }

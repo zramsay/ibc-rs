@@ -11,7 +11,7 @@ use tendermint::block::Height;
 
 const MAX_HEIGHT_GAP: u64 = 100;
 
-#[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
+#[derive(Debug, Clone)]
 enum BuilderState {
     Uninit,
     Init,
@@ -25,6 +25,7 @@ enum BuilderState {
     Finished,
 }
 
+#[derive(Debug, Clone)]
 pub struct MessageBuilder<O, Q>
 where
     O: BuilderObject,
@@ -55,10 +56,10 @@ where
     O: BuilderObject,
     Q: IbcQuery,
 {
-    pub(crate) fn new(event: ChainEvent<O>, dest_chain: ChainId) -> Self {
+    pub(crate) fn new(event: &ChainEvent<O>, dest_chain: ChainId) -> Self {
         MessageBuilder {
             fsm_state: BuilderState::Init,
-            event,
+            event: event.clone(),
             dest_chain,
             src_height_needed: Height::from(0),
             src_queries: vec![],
@@ -88,7 +89,7 @@ where
             //            BuilderState::SendingUpdateClientAtoB => self.handle.tx_dest_client_state_handle(key, event, chains),
             //            BuilderState::QueryTriggerObjects => self.handle.query_objects_state_handle(key, event, chains),
             //            BuilderState::SendingTransactionToB => self.handle.sending_transaction_to_dest_handle(key, event, chains),
-            _ => {}
+            _ => (self.fsm_state.clone(), BuilderRequests::new())
         };
         self.fsm_state = new_state;
         Ok(requests)
@@ -105,17 +106,16 @@ where
         O: BuilderObject,
         Q: IbcQuery,
     {
-        assert!(self.event == event);
-
-        let mut new_state = self.fsm_state;
+        let mut new_state = self.fsm_state.clone();
         let mut requests = BuilderRequests::new();
 
         match event {
             RelayerEvent::ChainEvent(ch_ev) => {
-                let obj = ch_ev.trigger_object?;
+                let obj = ch_ev.trigger_object.ok_or("event with no object")?;
+
                 if self.requires_updated_b_client_on_a(ch_ev.event) {
                     let b_height = b.height;
-                    let b_client_on_a_height = a.client_heights[&obj.client_id()?];
+                    let b_client_on_a_height = a.client_heights[&obj.client_id()];
 
                     // check if client on source chain is "fresh", i.e. within MAX_HEIGHT_GAP of dest_chain
                     if Height::from(b_client_on_a_height.value() + MAX_HEIGHT_GAP) <= b_height {
@@ -134,13 +134,13 @@ where
                             dest_client_request: self.dest_client_request,
                             ..requests.clone()
                         };
-                        Ok((new_state, BuilderRequests::new()))
+                        return Ok((new_state, BuilderRequests::new()));
                     }
                 }
 
                 let a_height = a.height;
-                let a_client_on_b_height = b.client_heights[&obj.counterparty_client_id()?];
-                if a_height <= self.src_height {
+                let a_client_on_b_height = b.client_heights[&obj.counterparty_client_id()];
+                if a_height <= self.event.chain_height {
                     // IBC events typically come before the corresponding NewBlock event and
                     // is therefore possible that the recorded height of A is smaller (strict) than
                     // the height of the message builder (created by the IBC Event).
@@ -154,7 +154,7 @@ where
             _ => {}
         }
 
-        Ok((new_state, BuilderRequests::new()))
+        Ok((new_state.clone(), BuilderRequests::new()))
     }
 
     fn requires_updated_b_client_on_a(&self, event: BuilderEvent) -> bool {
@@ -180,21 +180,21 @@ where
         a: &ChainData,
         b: &ChainData,
     ) -> Result<(BuilderState, BuilderRequests<O, Q>), BoxError> {
-        let mut new_state = self.fsm_state;
+        let mut new_state = self.fsm_state.clone();
         let mut requests = BuilderRequests::new();
 
-        let obj = self.event.trigger_object?;
+        let obj = self.event.trigger_object.ok_or("event with no object")?;
 
         match event {
             RelayerEvent::ChainEvent(chain_ev) => {
-                if let Some(BuilderEvent::NewBlock) = chain_ev.event {
+                if let BuilderEvent::NewBlock = chain_ev.event {
                     // Only interested in new blocks for source chain
                     if a.config.id != self.event.trigger_chain {
                         return Ok((new_state, requests));
                     }
 
                     let a_height = a.height;
-                    let a_client_on_b_height = b.client_heights[&obj.counterparty_client_id()?];
+                    let a_client_on_b_height = b.client_heights[&obj.counterparty_client_id()];
 
                     if a_height > self.event.chain_height {
                         if a_client_on_b_height <= self.event.chain_height {
@@ -203,8 +203,8 @@ where
                             self.src_client_request =
                                 Option::from(LightClientRequest::ConsensusStateUpdateRequest(
                                     ConsensusStateUpdateRequestParams::new(
-                                        self.src_chain,
-                                        self.src_height.increment(),
+                                        self.event.trigger_chain,
+                                        self.event.chain_height.increment(),
                                         a_height,
                                     ),
                                 ));
@@ -214,10 +214,10 @@ where
                                 ..requests.clone()
                             };
                         } else {
-                            self.event.chain_height = a_client_on_b_height - 1;
+                            self.event.chain_height = Height(u64::from(a_client_on_b_height) - 1);
                             let trigger = BuilderTrigger {
                                 chain: self.event.trigger_chain,
-                                obj: self.event.trigger_object,
+                                obj,
                             };
                             // plan queries for the source chain
                             // query consensus state if required by the event
@@ -227,22 +227,22 @@ where
                                     request: QueryClientConsensusState::new(
                                         u64::from(self.event.chain_height),
                                         obj.client_id(),
-                                        a.client_heights[obj.client_id()?],
+                                        u64::from(a.client_heights[&obj.client_id()]),
                                         true,
                                     ),
                                 });
                             }
-                            // query the builder object, e.g. connection, channel, etc
-                            self.src_queries.push(ChainQueryRequest {
-                                trigger,
-                                request: self.event.src_query(true),
-                            });
-
-                            // query the destination chain
-                            self.dest_queries.push(ChainQueryRequest {
-                                trigger,
-                                request: self.event.dest_query(true),
-                            });
+//                            // query the builder object, e.g. connection, channel, etc
+//                            self.src_queries.push(ChainQueryRequest {
+//                                trigger,
+//                                request: self.event.src_query(true)?,
+//                            });
+//
+//                            // query the destination chain
+//                            self.dest_queries.push(ChainQueryRequest {
+//                                trigger,
+//                                request: self.event.dest_query(true)?,
+//                            });
 
                             new_state = BuilderState::QueryingObjects;
                             requests = BuilderRequests {
