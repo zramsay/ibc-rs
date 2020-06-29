@@ -1,105 +1,52 @@
 use crate::chain::tendermint::TendermintChain;
 use crate::config::Config;
-use crate::event_handler::BuilderTrigger;
-use crate::query::connection::query_connection;
-use ::tendermint::chain::Id as ChainId;
-use relayer_modules::ics02_client::query::ConsensusStateResponse;
-use relayer_modules::ics03_connection::query::ConnectionResponse;
-use relayer_modules::ics24_host::identifier::{ClientId, ConnectionId};
-use tendermint::block::Height;
+use crate::query::ibc_query;
+use crate::relayer_state::{BuilderObject, BuilderTrigger};
+use relayer_modules::query::{IbcQuery, IbcResponse};
 use tokio::sync::mpsc::{Receiver, Sender};
 use tracing::info;
 
 // event_handler to Chain for queries
 #[derive(Debug, Clone)]
-pub struct ChainQuery {
-    // this will change
-    pub trigger: BuilderTrigger,
-    pub request: QueryRequest,
+pub struct ChainQueryRequest<O, Q>
+where
+    O: BuilderObject,
+    Q: IbcQuery,
+{
+    pub trigger: BuilderTrigger<O>,
+    pub request: Q,
 }
 
 #[derive(Debug, Clone)]
-pub enum QueryRequest {
-    ClientConsensusRequest(QueryClientConsensus),
-    ConnectionEndRequest(QueryConnectionEnd),
+pub struct ChainQueryResponse<O, Q>
+where
+    O: BuilderObject,
+    Q: IbcQuery,
+{
+    pub trigger: BuilderTrigger<O>,
+    pub response: Q::Response,
 }
 
-#[derive(Debug, Clone)]
-pub struct QueryClientConsensus {
-    chain: ChainId,
-    chain_height: Height,
-    client_id: ClientId,
-    prove: bool,
-}
-
-impl QueryClientConsensus {
-    pub fn new(chain: ChainId, chain_height: Height, client_id: ClientId, prove: bool) -> Self {
-        QueryClientConsensus {
-            chain,
-            chain_height,
-            client_id,
-            prove,
-        }
+fn matching_req_resp<O, Q>(req: &ChainQueryRequest<O, Q>, resp: &ChainQueryResponse<O, Q>) -> bool
+where
+    O: BuilderObject,
+    Q: IbcQuery,
+{
+    if req.trigger != resp.trigger {
+        false
     }
+    // TODO - no idea how to match req with resp
+    true
 }
 
-#[derive(Debug, Clone)]
-pub struct QueryConnectionEnd {
-    pub chain: ChainId,
-    pub chain_height: Height,
-    pub connection_id: ConnectionId,
-    pub prove: bool,
-}
-
-impl QueryConnectionEnd {
-    pub fn new(
-        chain: ChainId,
-        chain_height: Height,
-        connection_id: ConnectionId,
-        prove: bool,
-    ) -> Self {
-        QueryConnectionEnd {
-            chain,
-            chain_height,
-            connection_id,
-            prove,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ChainQuerierResponse<CS> {
-    pub from_chain: ChainId,
-    pub trigger: BuilderTrigger,
-    pub response: QueryResponse<CS>,
-}
-
-#[derive(Debug, Clone)]
-pub enum QueryResponse<CS> {
-    ConsensusStateResponse(ConsensusStateResponse<CS>),
-    ConnectionEndResponse(ConnectionResponse),
-}
-
-fn matching_req_resp<CS>(req: &QueryRequest, resp: &QueryResponse<CS>) -> bool {
-    match (req, resp) {
-        (
-            QueryRequest::ClientConsensusRequest(cons_req),
-            QueryResponse::ConsensusStateResponse(cons),
-        ) => Height(cons.proof_height) == cons_req.chain_height,
-
-        (
-            QueryRequest::ConnectionEndRequest(conn_req),
-            QueryResponse::ConnectionEndResponse(conn),
-        ) => Height(conn.proof_height) == conn_req.chain_height,
-
-        (_, _) => false,
-    }
-}
-
-pub(crate) fn valid_query_response<CS>(
-    response: &QueryResponse<CS>,
-    queries: &[QueryRequest],
-) -> bool {
+pub(crate) fn valid_query_response<O, Q>(
+    response: &ChainQueryResponse<O, Q>,
+    queries: &[ChainQueryRequest<O, Q>],
+) -> bool
+where
+    O: BuilderObject,
+    Q: IbcQuery,
+{
     for req in queries {
         if !matching_req_resp(req, &response) {
             continue;
@@ -110,20 +57,28 @@ pub(crate) fn valid_query_response<CS>(
 }
 
 /// The Querier handles IBC events from the monitors.
-pub struct ChainQueryHandler<CS> {
+pub struct ChainQueryHandler<O, Q>
+where
+    O: BuilderObject,
+    Q: IbcQuery,
+{
     config: Config,
     /// Channel where query requests are received from relayer.
-    query_request_rx: Receiver<ChainQuery>,
+    query_request_rx: Receiver<ChainQueryRequest<O, Q>>,
     /// Channel where query responses are sent to the relayer.
-    query_response_tx: Sender<ChainQuerierResponse<CS>>,
+    query_response_tx: Sender<ChainQueryResponse<O, Q>>,
 }
 
-impl<CS> ChainQueryHandler<CS> {
+impl<O, Q> ChainQueryHandler<O, Q>
+where
+    O: BuilderObject,
+    Q: IbcQuery,
+{
     /// Constructor for the Query Handler
     pub fn new(
         config: Config,
-        query_request_rx: Receiver<ChainQuery>,
-        query_response_tx: Sender<ChainQuerierResponse<CS>>,
+        query_request_rx: Receiver<ChainQueryRequest<O, Q>>,
+        query_response_tx: Sender<ChainQueryResponse<O, Q>>,
     ) -> Self {
         ChainQueryHandler {
             config,
@@ -139,38 +94,30 @@ impl<CS> ChainQueryHandler<CS> {
         loop {
             if let Some(query) = self.query_request_rx.recv().await {
                 let obj = query.clone().trigger;
-                let request = query.clone().request;
+                let query = query.clone().request;
 
-                match request {
-                    QueryRequest::ConnectionEndRequest(query) => {
-                        let response = query_connection(
-                            &TendermintChain::from_config(
-                                self.config
-                                    .chains
-                                    .iter()
-                                    .find(|c| c.id == query.chain)
-                                    .unwrap()
-                                    .clone(),
-                            )
-                            .unwrap(),
-                            u64::from(query.chain_height),
-                            query.connection_id.clone(),
-                            query.prove,
-                        )
-                        .await
-                        .unwrap();
+                let response = ibc_query(
+                    &TendermintChain::from_config(
+                        self.config
+                            .chains
+                            .iter()
+                            .find(|c| c.id == query.chain)
+                            .unwrap()
+                            .clone(),
+                    )
+                    .unwrap(),
+                    query,
+                )
+                .await
+                .unwrap();
 
-                        let _res = self
-                            .query_response_tx
-                            .send(ChainQuerierResponse {
-                                from_chain: query.chain,
-                                trigger: obj,
-                                response: QueryResponse::ConnectionEndResponse(response),
-                            })
-                            .await;
-                    }
-                    _ => {}
-                }
+                let _res = self
+                    .query_response_tx
+                    .send(ChainQueryResponse {
+                        trigger: obj,
+                        response,
+                    })
+                    .await;
             }
         }
     }
