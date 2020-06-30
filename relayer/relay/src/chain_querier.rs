@@ -76,7 +76,7 @@ impl ChainQueryHandler {
                 )
                 .await
                 .unwrap();
-                return QueryResponse::ClientConsensusState(response);
+                QueryResponse::ClientConsensusState(response)
             }
             ChainQueryRequest::ConnectionParams(q) => {
                 let response = ibc_query(
@@ -89,7 +89,7 @@ impl ChainQueryHandler {
                 )
                 .await
                 .unwrap();
-                return QueryResponse::Connection(response);
+                QueryResponse::Connection(response)
             }
         }
     }
