@@ -12,11 +12,10 @@ use std::fmt::Debug;
 use std::hash::Hash;
 use tendermint::block::Height;
 
-pub trait BuilderObject: Sized + Debug + Clone + Send + Hash {
-    fn new(ev: &IBCEvent) -> Result<Self, BoxError>;
-    fn flipped(&self) -> Option<Self> {
-        None
-    }
+pub trait BuilderObject: Sized {
+    fn new(ev: &IBCEvent) -> Result<Self, BoxError>
+    where
+        Self: Sized;
     fn client_id(&self) -> ClientId;
     fn client_height(&self) -> Height;
     fn counterparty_client_id(&self) -> ClientId;

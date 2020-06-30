@@ -75,7 +75,6 @@ impl MessageBuilder {
             BuilderState::WaitNextHeightOnA => {
                 self.wait_next_src_height_state_handle(event, src_chain, dest_chain)?
             }
-
             //            BuilderState::UpdatingClientBonA => self.handle.update_src_client_state_handle(key, event, chains),
             //            BuilderState::SendingUpdateClientBtoA => self.handle.tx_src_client_state_handle(key, event, chains),
             //            BuilderState::UpdatingClientAonB => self.handle.update_dest_client_state_handle(key, event, chains),

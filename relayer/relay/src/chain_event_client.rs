@@ -52,10 +52,6 @@ impl BuilderObject for ClientBuilderObject {
         }
     }
 
-    fn flipped(&self) -> Option<Self> {
-        unimplemented!()
-    }
-
     fn client_id(&self) -> ClientId {
         self.client_id.clone()
     }

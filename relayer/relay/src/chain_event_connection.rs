@@ -39,14 +39,14 @@ impl BuilderObject for ConnectionBuilderObject {
         }
     }
 
-    fn flipped(&self) -> Option<Self> {
-        Some(ConnectionBuilderObject {
-            connection_id: self.counterparty_connection_id.clone(),
-            client_id: self.counterparty_client_id.clone(),
-            counterparty_connection_id: self.connection_id.clone(),
-            counterparty_client_id: self.client_id.clone(),
-        })
-    }
+    //    fn flipped(&self) -> Option<Self> {
+    //        Some(ConnectionBuilderObject {
+    //            connection_id: self.counterparty_connection_id.clone(),
+    //            client_id: self.counterparty_client_id.clone(),
+    //            counterparty_connection_id: self.connection_id.clone(),
+    //            counterparty_client_id: self.client_id.clone(),
+    //        })
+    //    }
 
     fn client_id(&self) -> ClientId {
         self.client_id.clone()
