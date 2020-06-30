@@ -60,7 +60,7 @@ pub async fn relayer_task(config: &Config, relay: bool) {
     let (query_response_tx, query_response_rx) = channel(100);
 
     info!("spawning main chain querier handler");
-    let mut chain_query_handler: ChainQueryHandler<ConsensusState> =
+    let mut chain_query_handler: ChainQueryHandler =
         ChainQueryHandler::new(config.clone(), query_request_rx, query_response_tx);
     let q_handle = tokio::spawn(async move { chain_query_handler.run().await });
     all_futures.push(q_handle);

@@ -1,4 +1,3 @@
-use crate::chain_event_connection::ConnectionBuilderObject;
 use crate::relayer_state::BuilderObject;
 use ::tendermint::chain::Id as ChainId;
 use anomaly::BoxError;
@@ -37,7 +36,7 @@ where
     O: BuilderObject,
 {
     pub fn new_from_ibc_event(trigger_chain: ChainId, event: IBCEvent) -> Result<Self, BoxError> {
-        match event {
+        match event.clone() {
             IBCEvent::NewBlock(nb) => Ok(ChainEvent {
                 trigger_chain,
                 chain_height: nb.height,
@@ -57,11 +56,11 @@ where
                 trigger_object: None,
             }),
             IBCEvent::OpenInitConnection(conn) => Ok(ChainEvent {
-                trigger_chain,
-                chain_height: conn.height,
-                event: BuilderEvent::ConnectionOpenInit,
-                trigger_object: Some(ConnectionBuilderObject::new(&event)?),
-            }),
+                    trigger_chain,
+                    chain_height: conn.height,
+                    event: BuilderEvent::ConnectionOpenInit,
+                    trigger_object: Some(BuilderObject::new(&event.clone())?),
+                }),
 
             _ => Err("Unrecognized event".into()),
         }

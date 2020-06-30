@@ -2,71 +2,67 @@ use relayer_modules::events::IBCEvent;
 use tokio::sync::mpsc::{Receiver, Sender};
 
 use crate::chain_event::{BuilderEvent, ChainEvent};
-use crate::chain_querier::{ChainQueryRequest, ChainQueryResponse};
+use crate::chain_querier::{ChainQueryResponse, ChainQueryRequestParams};
 use crate::config::Config;
-use crate::light_client_querier::{LightClientQuerierResponse, LightClientQuery};
+use crate::light_client_querier::{LightClientQuery, LightClientQueryResponse};
 use crate::message_builder::BuilderRequests;
-use crate::relayer_state::{BuilderObject, BuilderTrigger, RelayerState};
+use crate::relayer_state::{BuilderObject, RelayerState};
 use ::tendermint::chain::Id as ChainId;
 use anomaly::BoxError;
-use relayer_modules::query::{IbcQuery, IbcResponse};
 use tracing::{debug, info};
 
-pub enum RelayerEvent<O, Q>
+pub enum RelayerEvent<O>
 where
     O: BuilderObject,
-    Q: IbcQuery,
 {
     ChainEvent(ChainEvent<O>),
-    QueryEvent(ChainQueryResponse<O, Q>),
-    LightClientEvent(LightClientQuerierResponse<O>),
+    QueryEvent(ChainQueryResponse),
+    LightClientEvent(LightClientQueryResponse),
 }
 
 /// The Event Handler handles IBC events from the monitors.
-pub struct EventHandler<O, Q>
+pub struct EventHandler<O>
 where
     O: BuilderObject,
-    Q: IbcQuery,
 {
     /// If true the handler processes event and attempts to relay,
     /// otherwise it only dumps the events.
     relay: bool,
-    config: Config,
+    //config: Config,
 
     /// Channel where events from the different chains are received
     chain_ev_rx: Receiver<(ChainId, Vec<IBCEvent>)>,
 
     /// Channel where query requests are sent
     /// TODO - make one querier per chain
-    query_request_tx: Sender<ChainQueryRequest<O, Q>>,
+    query_request_tx: Sender<ChainQueryRequestParams>,
     /// Channel where query responses are received
-    query_response_rx: Receiver<ChainQueryResponse<O, Q>>,
+    query_response_rx: Receiver<ChainQueryResponse>,
 
-    light_client_request_tx: Sender<LightClientQuery<O>>,
-    light_client_response_rx: Receiver<LightClientQuerierResponse<O>>,
+    light_client_request_tx: Sender<LightClientQuery>,
+    light_client_response_rx: Receiver<LightClientQueryResponse>,
 
     /// Relayer state, updated by the different events on _rx channels
-    relayer_state: RelayerState<O, Q>,
+    relayer_state: RelayerState<O>,
 }
 
-impl<O: 'static, Q: 'static> EventHandler<O, Q>
+impl<O> EventHandler<O>
 where
-    O: BuilderObject + std::marker::Sync,
-    Q: IbcQuery + std::marker::Sync,
+    O: BuilderObject,
 {
     /// Constructor for the Event Handler
     pub fn new(
         relay: bool,
         config: &Config,
         chain_ev_rx: Receiver<(ChainId, Vec<IBCEvent>)>,
-        query_request_tx: Sender<ChainQueryRequest<O, Q>>,
-        query_response_rx: Receiver<ChainQueryResponse<O, Q>>,
-        light_client_request_tx: Sender<LightClientQuery<O>>,
-        light_client_response_rx: Receiver<LightClientQuerierResponse<O>>,
+        query_request_tx: Sender<ChainQueryRequestParams>,
+        query_response_rx: Receiver<ChainQueryResponse>,
+        light_client_request_tx: Sender<LightClientQuery>,
+        light_client_response_rx: Receiver<LightClientQueryResponse>,
     ) -> Self {
         EventHandler {
             relay,
-            config: config.clone(),
+            //config: config.clone(),
             chain_ev_rx,
             query_request_tx,
             query_response_rx,
@@ -99,10 +95,9 @@ where
         }
     }
 
-    async fn event_handler(&mut self, event: RelayerEvent<O, Q>)
+    async fn event_handler(&mut self, event: RelayerEvent<O>)
     where
         O: BuilderObject,
-        Q: IbcQuery,
     {
         match event {
             RelayerEvent::ChainEvent(chain_event) => {
@@ -141,21 +136,20 @@ where
 
     async fn query_response_handler(
         &mut self,
-        r: &ChainQueryResponse<O, Q>,
+        r: &ChainQueryResponse,
     ) -> Result<(), BoxError> {
 
         let requests = self.relayer_state
-            .query_response_handler(r.trigger.chain, r.trigger.clone(), r)?;
+            .query_response_handler( r)?;
 
-        self.send_builder_requests(r.trigger.clone(), requests)
+        self.send_builder_requests(requests)
             .await?;
         Ok(())
     }
 
     async fn send_builder_requests(
         &mut self,
-        trigger: BuilderTrigger<O>,
-        requests: BuilderRequests<O, Q>,
+        requests: BuilderRequests,
     ) -> Result<(), BoxError> {
         // Send any required queries to Chain or local Light Clients
         for request in requests.src_queries {
@@ -172,19 +166,13 @@ where
 
         if let Some(request) = requests.src_client_request {
             self.light_client_request_tx
-                .send(LightClientQuery {
-                    trigger: trigger.clone(),
-                    request,
-                })
+                .send(request)
                 .await?;
         }
 
         if let Some(request) = requests.dest_client_request {
             self.light_client_request_tx
-                .send(LightClientQuery {
-                    trigger: trigger.clone(),
-                    request,
-                })
+                .send(request)
                 .await?;
         }
         Ok(())
@@ -195,13 +183,7 @@ where
         // TODO - check that realyer should relay between the chains and for this connection
         let requests = self.relayer_state.handshake_event_handler(ev)?;
 
-        self.send_builder_requests(
-            BuilderTrigger {
-                chain: ev.trigger_chain.clone(),
-                obj: ev.trigger_object.clone().ok_or("event with no object")?,
-            },
-            requests,
-        )
+        self.send_builder_requests(requests)
         .await?;
         Ok(())
     }
