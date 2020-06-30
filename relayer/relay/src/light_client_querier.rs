@@ -13,18 +13,18 @@ pub struct LightClientQuery {
 
 #[derive(Debug, Clone)]
 pub enum LightClientRequest {
-    ConsensusStateUpdateRequest(ConsensusStateUpdateRequestParams),
+    ConsensusStateRequest(ConsensusStateRequestParams),
 }
 
 #[derive(Debug, Clone)]
-pub struct ConsensusStateUpdateRequestParams {
+pub struct ConsensusStateRequestParams {
     cs_height: Height,
     last_cs_height: Height,
 }
 
-impl ConsensusStateUpdateRequestParams {
+impl ConsensusStateRequestParams {
     pub(crate) fn new(cs_height: Height, last_cs_height: Height) -> Self {
-        ConsensusStateUpdateRequestParams {
+        ConsensusStateRequestParams {
             cs_height,
             last_cs_height,
         }
@@ -77,4 +77,15 @@ impl LightClientQueryHandler {
             info!("Light Client Querier received {:?}", query);
         }
     }
+}
+
+pub fn light_client_headers_request(from: ChainId, cs_height: Height, base_cs_height: Height) -> Option<LightClientQuery> {
+    Option::from(LightClientQuery {
+        chain: from,
+        request: LightClientRequest::ConsensusStateRequest(
+            ConsensusStateRequestParams::new(
+                cs_height, base_cs_height,
+            ),
+        ),
+    })
 }

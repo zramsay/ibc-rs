@@ -1,11 +1,7 @@
 use crate::chain_event::{BuilderEvent, ChainEvent};
-use crate::chain_querier::{
-    ChainQueryRequest, ChainQueryRequestParams, ChainQueryResponse, ClientConsensusParams,
-};
+use crate::chain_querier::{ChainQueryRequestParams, ChainQueryResponse, chain_query_consensus_state_request, chain_query_object_request, chain_query_flipped_object_request};
 use crate::event_handler::RelayerEvent;
-use crate::light_client_querier::{
-    ConsensusStateUpdateRequestParams, LightClientQuery, LightClientRequest,
-};
+use crate::light_client_querier::{LightClientQuery, light_client_headers_request};
 use crate::relayer_state::{BuilderObject, ChainData};
 use ::tendermint::chain::Id as ChainId;
 use anomaly::BoxError;
@@ -70,6 +66,7 @@ impl MessageBuilder {
         src_chain: &ChainData,
         dest_chain: &ChainData,
     ) -> Result<BuilderRequests, BoxError> {
+        // TODO - look at errors and decide, most of them should be just recorded as the state machine should not have changed
         let (new_state, requests) = match self.fsm_state {
             BuilderState::Init => self.init_state_handle(event, src_chain, dest_chain)?,
             BuilderState::WaitNextHeightOnA => {
@@ -101,23 +98,19 @@ impl MessageBuilder {
             RelayerEvent::ChainEvent(ch_ev) => {
                 let obj = ch_ev.trigger_object.ok_or("event with no object")?;
 
-                if self.requires_updated_b_client_on_a(ch_ev.event) {
+                if crate::chain_event::requires_updated_b_client_on_a(ch_ev.event) {
                     let b_height = b.height;
                     let b_client_on_a_height = a.client_heights[&obj.client_id()];
 
                     // check if client on source chain is "fresh", i.e. within MAX_HEIGHT_GAP of dest_chain
                     if Height::from(b_client_on_a_height.value() + MAX_HEIGHT_GAP) <= b_height {
                         // build request for new header(s) from local light client for destination chain
-                        self.dest_client_request = Option::from(LightClientQuery {
-                            chain: self.dest_chain,
-                            request: LightClientRequest::ConsensusStateUpdateRequest(
-                                ConsensusStateUpdateRequestParams::new(
-                                    b_height,
-                                    b_client_on_a_height,
-                                ),
-                            ),
-                        });
-                        // return all requests to event handler for IO
+                        self.dest_client_request = light_client_headers_request(
+                            self.dest_chain,
+                            b_height,
+                        b_client_on_a_height);
+
+                        // return requests to event handler for IO
                         new_state = BuilderState::UpdatingClientBonA;
                         requests = BuilderRequests {
                             dest_client_request: self.dest_client_request.clone(),
@@ -135,30 +128,13 @@ impl MessageBuilder {
                 } else {
                     // a_height > self.src_height - this is not possible as this means we got events
                     // out of order, i.e. NewBlock(H), IBCEvent(X, h) with h < H
-                    // panic?
+                    Err("events out of order".into())
                 }
             }
             _ => {}
         }
 
         Ok((new_state.clone(), BuilderRequests::new()))
-    }
-
-    fn requires_updated_b_client_on_a(&self, event: BuilderEvent) -> bool {
-        match event {
-            BuilderEvent::ConnectionOpenInit | BuilderEvent::ConnectionOpenTry => true,
-            _ => false,
-        }
-    }
-
-    fn requires_consensus_proof_for_b_client_on_a(&self, event: BuilderEvent) -> bool {
-        match event {
-            BuilderEvent::ConnectionOpenInit
-            | BuilderEvent::ConnectionOpenTry
-            | BuilderEvent::ChannelOpenInit
-            | BuilderEvent::ChannelOpenTry => true,
-            _ => false,
-        }
     }
 
     fn wait_next_src_height_state_handle(
@@ -188,18 +164,15 @@ impl MessageBuilder {
                     let a_client_on_b_height = b.client_heights[&obj.counterparty_client_id()];
 
                     if a_height > self.event.chain_height {
-                        if a_client_on_b_height <= self.event.chain_height {
-                            // client on destination needs update,
+                        if a_client_on_b_height <= self.event.chain_height &&
+                            self.src_client_request.is_none() {
+                            // if client on destination needs update and we haven't requested them already,
                             // request header(s) from local source light client.
-                            self.src_client_request = Option::from(LightClientQuery {
-                                chain: self.event.trigger_chain,
-                                request: LightClientRequest::ConsensusStateUpdateRequest(
-                                    ConsensusStateUpdateRequestParams::new(
-                                        self.event.chain_height.increment(),
-                                        a_height,
-                                    ),
-                                ),
-                            });
+                            self.src_client_request = light_client_headers_request(
+                                    self.event.trigger_chain,
+                                    self.event.chain_height.increment(),
+                                    a_height);
+
                             new_state = BuilderState::UpdatingClientBonA;
                             requests = BuilderRequests {
                                 dest_client_request: self.dest_client_request.clone(),
@@ -209,29 +182,22 @@ impl MessageBuilder {
                             self.event.chain_height = Height(u64::from(a_client_on_b_height) - 1);
                             // plan queries for the source chain
                             // query consensus state if required by the event
-                            if self.requires_consensus_proof_for_b_client_on_a(chain_ev.event) {
-                                let p = ClientConsensusParams {
-                                    client_id: obj.client_id().clone(),
-                                    consensus_height: a.client_heights[&obj.client_id()],
-                                };
-                                self.src_queries.push(ChainQueryRequestParams {
-                                    chain: self.event.trigger_chain,
-                                    chain_height: self.event.chain_height,
-                                    prove: true,
-                                    request: ChainQueryRequest::ClientConsensusParams(p),
-                                });
+                            if crate::chain_event::requires_consensus_proof_for_b_client_on_a(chain_ev.event) {
+                                self.src_queries.push(chain_query_consensus_state_request(
+                                    self.event.trigger_chain,
+                                    self.event.chain_height,
+                                    obj.client_id().clone(), a.client_heights[&obj.client_id()],
+                                    true,
+                                ))
                             }
-                            //                            // query the builder object, e.g. connection, channel, etc
-                            //                            self.src_queries.push(ChainQueryRequest {
-                            //                                trigger,
-                            //                                request: self.event.src_query(true)?,
-                            //                            });
-                            //
-                            //                            // query the destination chain
-                            //                            self.dest_queries.push(ChainQueryRequest {
-                            //                                trigger,
-                            //                                request: self.event.dest_query(true)?,
-                            //                            });
+                            // query the builder object, e.g. connection, channel, etc
+                            self.src_queries.push(chain_query_object_request(&self.event, true));
+
+                            // query object on destination chain if applicable (e.g. for connections
+                            // and channels).
+                            if let Some(dest_query) = chain_query_flipped_object_request(&self.event, false) {
+                                self.src_queries.push(dest_query);
+                            }
 
                             new_state = BuilderState::QueryingObjects;
                             requests = BuilderRequests {
@@ -244,7 +210,7 @@ impl MessageBuilder {
                         // it is possible to get the new block event immediately after the
                         // trigger event, nothing to do
                     } else {
-                        panic!("blockchain is decreasing in height");
+                        Err("event suggests that blockchain is decreasing in height".into());
                     }
                 }
             }
