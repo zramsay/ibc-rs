@@ -5,7 +5,7 @@ use crate::ics24_host::identifier::ClientId;
 use crate::Height;
 use std::fmt::Debug;
 
-pub trait ConsensusState : Debug + Clone + Send {
+pub trait ConsensusState: Debug + Clone + Send {
     type ValidationError: std::error::Error;
 
     /// Type of client associated with this consensus state (eg. Tendermint)
@@ -21,7 +21,7 @@ pub trait ConsensusState : Debug + Clone + Send {
     fn validate_basic(&self) -> Result<(), Self::ValidationError>;
 }
 
-pub trait ClientState : Debug + Clone + Send {
+pub trait ClientState: Debug + Clone + Send {
     type ValidationError: std::error::Error;
 
     /// Client ID of this state

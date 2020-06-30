@@ -67,16 +67,4 @@ impl BuilderObject for ClientBuilderObject {
     fn counterparty_client_id(&self) -> ClientId {
         unimplemented!()
     }
-
-//    fn build_ibc_query (&self, height: Height, prove: bool) -> QueryClientFullState<CLS> {
-//        QueryClientFullState::new( u64::from(height), self.client_id.clone(), prove)
-//    }
-//
-//    fn build_flipped_ibc_query<QueryClientFullState>(
-//        &self,
-//        height: Height,
-//        prove: bool,
-//    ) -> QueryClientFullState {
-//        unimplemented!()
-//    }
 }

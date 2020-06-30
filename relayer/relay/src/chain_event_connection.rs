@@ -59,16 +59,4 @@ impl BuilderObject for ConnectionBuilderObject {
     fn counterparty_client_id(&self) -> ClientId {
         self.counterparty_client_id.clone()
     }
-
-//    fn build_ibc_query<QueryConnection>(&self, height: Height, prove: bool) -> QueryConnection {
-//        QueryConnection::new(u64::from(height), self.connection_id.clone(), prove)
-//    }
-//
-//    fn build_flipped_ibc_query<QueryConnection>(
-//        &self,
-//        height: Height,
-//        prove: bool,
-//    ) -> QueryConnection {
-//        QueryConnection::new(u64::from(height), self.counterparty_connection_id.clone(), prove)
-//    }
 }

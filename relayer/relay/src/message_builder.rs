@@ -1,7 +1,11 @@
 use crate::chain_event::{BuilderEvent, ChainEvent};
-use crate::chain_querier::{ChainQueryRequest, ChainQueryResponse, ChainQueryRequestParams, ClientConsensusParams};
+use crate::chain_querier::{
+    ChainQueryRequest, ChainQueryRequestParams, ChainQueryResponse, ClientConsensusParams,
+};
 use crate::event_handler::RelayerEvent;
-use crate::light_client_querier::{ConsensusStateUpdateRequestParams, LightClientRequest, LightClientQuery};
+use crate::light_client_querier::{
+    ConsensusStateUpdateRequestParams, LightClientQuery, LightClientRequest,
+};
 use crate::relayer_state::{BuilderObject, ChainData};
 use ::tendermint::chain::Id as ChainId;
 use anomaly::BoxError;
@@ -23,35 +27,29 @@ enum BuilderState {
 }
 
 #[derive(Debug, Clone)]
-pub struct MessageBuilder<O>
-where
-    O: BuilderObject,
-{
+pub struct MessageBuilder {
     fsm_state: BuilderState,
 
     // the event that created this builder, only its height may change
-    pub event: ChainEvent<O>,
+    pub event: ChainEvent,
     pub dest_chain: ChainId,
 
     // wait for src chain to get to src_height
     src_height_needed: Height,
 
     // pending queries
-    pub   src_queries: Vec<ChainQueryRequestParams>,
-    pub   src_responses: Vec<ChainQueryResponse>,
-    pub   dest_queries: Vec<ChainQueryRequestParams>,
-    pub   dest_responses: Vec<ChainQueryResponse>,
+    pub src_queries: Vec<ChainQueryRequestParams>,
+    pub src_responses: Vec<ChainQueryResponse>,
+    pub dest_queries: Vec<ChainQueryRequestParams>,
+    pub dest_responses: Vec<ChainQueryResponse>,
 
     // pending requests to local light clients
     src_client_request: Option<LightClientQuery>,
     dest_client_request: Option<LightClientQuery>,
 }
 
-impl<O> MessageBuilder<O>
-where
-    O: BuilderObject,
-{
-    pub   fn new(event: &ChainEvent<O>, dest_chain: ChainId) -> Self {
+impl MessageBuilder {
+    pub fn new(event: &ChainEvent, dest_chain: ChainId) -> Self {
         MessageBuilder {
             fsm_state: BuilderState::Init,
             event: event.clone(),
@@ -66,9 +64,9 @@ where
         }
     }
 
-    pub   fn message_builder_handler(
+    pub fn message_builder_handler(
         &mut self,
-        event: RelayerEvent<O>,
+        event: RelayerEvent,
         src_chain: &ChainData,
         dest_chain: &ChainData,
     ) -> Result<BuilderRequests, BoxError> {
@@ -84,7 +82,7 @@ where
             //            BuilderState::SendingUpdateClientAtoB => self.handle.tx_dest_client_state_handle(key, event, chains),
             //            BuilderState::QueryTriggerObjects => self.handle.query_objects_state_handle(key, event, chains),
             //            BuilderState::SendingTransactionToB => self.handle.sending_transaction_to_dest_handle(key, event, chains),
-            _ => (self.fsm_state.clone(), BuilderRequests::new())
+            _ => (self.fsm_state.clone(), BuilderRequests::new()),
         };
         self.fsm_state = new_state;
         Ok(requests)
@@ -93,13 +91,10 @@ where
     // called immediately after builder is created
     fn init_state_handle(
         &mut self,
-        event: RelayerEvent<O>,
+        event: RelayerEvent,
         a: &ChainData,
         b: &ChainData,
-    ) -> Result<(BuilderState, BuilderRequests), BoxError>
-    where
-        O: BuilderObject,
-    {
+    ) -> Result<(BuilderState, BuilderRequests), BoxError> {
         let mut new_state = self.fsm_state.clone();
         let mut requests = BuilderRequests::new();
 
@@ -114,15 +109,15 @@ where
                     // check if client on source chain is "fresh", i.e. within MAX_HEIGHT_GAP of dest_chain
                     if Height::from(b_client_on_a_height.value() + MAX_HEIGHT_GAP) <= b_height {
                         // build request for new header(s) from local light client for destination chain
-                        self.dest_client_request =
-                            Option::from(LightClientQuery {
-                                chain: self.dest_chain,
-                                request: LightClientRequest::ConsensusStateUpdateRequest(
+                        self.dest_client_request = Option::from(LightClientQuery {
+                            chain: self.dest_chain,
+                            request: LightClientRequest::ConsensusStateUpdateRequest(
                                 ConsensusStateUpdateRequestParams::new(
                                     b_height,
                                     b_client_on_a_height,
                                 ),
-                            )});
+                            ),
+                        });
                         // return all requests to event handler for IO
                         new_state = BuilderState::UpdatingClientBonA;
                         requests = BuilderRequests {
@@ -169,14 +164,18 @@ where
 
     fn wait_next_src_height_state_handle(
         &mut self,
-        event: RelayerEvent<O>,
+        event: RelayerEvent,
         a: &ChainData,
         b: &ChainData,
     ) -> Result<(BuilderState, BuilderRequests), BoxError> {
         let mut new_state = self.fsm_state.clone();
         let mut requests = BuilderRequests::new();
 
-        let obj = self.event.trigger_object.clone().ok_or("event with no object")?;
+        let obj = self
+            .event
+            .trigger_object
+            .clone()
+            .ok_or("event with no object")?;
 
         match event {
             RelayerEvent::ChainEvent(chain_ev) => {
@@ -193,15 +192,15 @@ where
                         if a_client_on_b_height <= self.event.chain_height {
                             // client on destination needs update,
                             // request header(s) from local source light client.
-                            self.src_client_request =
-                                Option::from(LightClientQuery {
-                                    chain: self.event.trigger_chain,
-                                    request: LightClientRequest::ConsensusStateUpdateRequest(
-                                        ConsensusStateUpdateRequestParams::new(
-                                            self.event.chain_height.increment(),
-                                            a_height,
-                                        ),
-                                    )});
+                            self.src_client_request = Option::from(LightClientQuery {
+                                chain: self.event.trigger_chain,
+                                request: LightClientRequest::ConsensusStateUpdateRequest(
+                                    ConsensusStateUpdateRequestParams::new(
+                                        self.event.chain_height.increment(),
+                                        a_height,
+                                    ),
+                                ),
+                            });
                             new_state = BuilderState::UpdatingClientBonA;
                             requests = BuilderRequests {
                                 dest_client_request: self.dest_client_request.clone(),
@@ -220,19 +219,20 @@ where
                                     chain: self.event.trigger_chain,
                                     chain_height: self.event.chain_height,
                                     prove: true,
-                                    request: ChainQueryRequest::ClientConsensusParams(p)});
+                                    request: ChainQueryRequest::ClientConsensusParams(p),
+                                });
                             }
-//                            // query the builder object, e.g. connection, channel, etc
-//                            self.src_queries.push(ChainQueryRequest {
-//                                trigger,
-//                                request: self.event.src_query(true)?,
-//                            });
-//
-//                            // query the destination chain
-//                            self.dest_queries.push(ChainQueryRequest {
-//                                trigger,
-//                                request: self.event.dest_query(true)?,
-//                            });
+                            //                            // query the builder object, e.g. connection, channel, etc
+                            //                            self.src_queries.push(ChainQueryRequest {
+                            //                                trigger,
+                            //                                request: self.event.src_query(true)?,
+                            //                            });
+                            //
+                            //                            // query the destination chain
+                            //                            self.dest_queries.push(ChainQueryRequest {
+                            //                                trigger,
+                            //                                request: self.event.dest_query(true)?,
+                            //                            });
 
                             new_state = BuilderState::QueryingObjects;
                             requests = BuilderRequests {
@@ -256,7 +256,7 @@ where
 }
 
 #[derive(Debug, Clone)]
-pub   struct BuilderRequests {
+pub struct BuilderRequests {
     // queries
     pub src_queries: Vec<ChainQueryRequestParams>,
     pub dest_queries: Vec<ChainQueryRequestParams>,
@@ -267,7 +267,7 @@ pub   struct BuilderRequests {
 }
 
 impl BuilderRequests {
-    pub   fn new() -> Self {
+    pub fn new() -> Self {
         BuilderRequests {
             src_queries: vec![],
             dest_queries: vec![],
@@ -276,7 +276,7 @@ impl BuilderRequests {
         }
     }
 
-    pub   fn merge(&mut self, br: &mut BuilderRequests) {
+    pub fn merge(&mut self, br: &mut BuilderRequests) {
         self.src_queries.append(&mut br.src_queries);
         self.dest_queries.append(&mut br.dest_queries);
         // TODO - change client requests from Option to Vec

@@ -5,14 +5,14 @@ use crate::event_handler::RelayerEvent;
 use crate::message_builder::{BuilderRequests, MessageBuilder};
 use ::tendermint::chain::Id as ChainId;
 use anomaly::BoxError;
+use relayer_modules::events::IBCEvent;
 use relayer_modules::ics24_host::identifier::ClientId;
 use std::collections::HashMap;
-use tendermint::block::Height;
 use std::fmt::Debug;
 use std::hash::Hash;
-use relayer_modules::events::IBCEvent;
+use tendermint::block::Height;
 
-pub trait BuilderObject: Sized + Debug + Clone + Send + Eq + Hash {
+pub trait BuilderObject: Sized + Debug + Clone + Send + Hash {
     fn new(ev: &IBCEvent) -> Result<Self, BoxError>;
     fn flipped(&self) -> Option<Self> {
         None
@@ -20,28 +20,16 @@ pub trait BuilderObject: Sized + Debug + Clone + Send + Eq + Hash {
     fn client_id(&self) -> ClientId;
     fn client_height(&self) -> Height;
     fn counterparty_client_id(&self) -> ClientId;
-//    fn build_ibc_query<T>(&self, height: Height, prove: bool) -> T;
-//    fn build_flipped_ibc_query<T>(
-//        &self,
-//        height: Height,
-//        prove: bool,
-//    ) -> T;
 }
 
 #[derive(Debug, Clone, PartialOrd, PartialEq, Eq, Hash)]
-pub  struct BuilderTrigger<O>
-where
-    O: BuilderObject,
-{
+pub struct BuilderTrigger {
     pub chain: ChainId,
-    pub obj: O,
+    pub obj: Box<dyn BuilderObject>,
 }
 
-impl<O> BuilderTrigger<O>
-where
-    O: BuilderObject,
-{
-    pub fn from_event(ev: ChainEvent<O>) -> Result<Self, BoxError> {
+impl BuilderTrigger {
+    pub fn from_event(ev: ChainEvent) -> Result<Self, BoxError> {
         Ok(BuilderTrigger {
             chain: ev.trigger_chain,
             obj: ev.trigger_object.ok_or("event missing object")?,
@@ -54,9 +42,9 @@ where
 pub struct ChainData {
     pub config: ChainConfig,
     /// Chain's height
-    pub  height: Height,
+    pub height: Height,
     /// Heights of clients instantiated on chain
-    pub  client_heights: HashMap<ClientId, Height>,
+    pub client_heights: HashMap<ClientId, Height>,
 }
 
 impl ChainData {
@@ -69,20 +57,14 @@ impl ChainData {
     }
 }
 #[derive(Debug, Clone)]
-pub  struct RelayerState<O>
-where
-    O: BuilderObject,
-{
+pub struct RelayerState {
     chain_states: HashMap<ChainId, ChainData>,
     /// Message Builder, key is the trigger event, value shows the state of event processing
-    message_builders: HashMap<BuilderTrigger<O>, MessageBuilder<O>>,
+    message_builders: HashMap<BuilderTrigger, MessageBuilder>,
 }
 
-impl<O> RelayerState<O>
-where
-    O: BuilderObject,
-{
-    pub  fn new(config: Config) -> Self {
+impl RelayerState {
+    pub fn new(config: Config) -> Self {
         let mut res = RelayerState {
             chain_states: HashMap::new(),
             message_builders: HashMap::new(),
@@ -94,7 +76,7 @@ where
         res
     }
 
-    pub fn new_block_update(&mut self, ev: ChainEvent<O>) -> Result<(), BoxError> {
+    pub fn new_block_update(&mut self, ev: ChainEvent) -> Result<(), BoxError> {
         // Iterate over all builders in case some were waiting for this new block
         let mut merged_requests = BuilderRequests::new();
         if let Some(BuilderEvent::NewBlock) = Some(ev.event.clone()) {
@@ -133,20 +115,18 @@ where
         Err("unexpected event".into())
     }
 
-    pub  fn query_response_handler(
+    pub fn query_response_handler(
         &mut self,
         response: &ChainQueryResponse,
     ) -> Result<BuilderRequests, BoxError> {
         let requests = BuilderRequests::new();
 
         for (_key, mut mb) in self.message_builders.clone() {
-            if valid_query_response(&response, &mb.src_queries)
-            {
+            if valid_query_response(&response, &mb.src_queries) {
                 mb.src_responses.push(response.clone());
                 // TODO - call the message builder handler for response
                 return Ok(requests);
-            } else if valid_query_response(&response, &mb.dest_queries)
-            {
+            } else if valid_query_response(&response, &mb.dest_queries) {
                 mb.dest_responses.push(response.clone());
                 // TODO - call the message builder handler for response
                 return Ok(requests);
@@ -156,7 +136,7 @@ where
         Err("No matching message builder for query response".into())
     }
 
-    pub  fn client_handler(&mut self, n: ChainEvent<O>) -> Result<(), BoxError> {
+    pub fn client_handler(&mut self, n: ChainEvent) -> Result<(), BoxError> {
         if let Some(BuilderEvent::CreateClient) = Some(n.event) {
             let key = n.trigger_object.ok_or("missing object")?;
             *self
@@ -171,12 +151,17 @@ where
         Err("unexpected event".into())
     }
 
-    pub  fn handshake_event_handler(
+    pub fn handshake_event_handler(
         &mut self,
-        ev: &ChainEvent<O>,
+        ev: &ChainEvent,
     ) -> Result<BuilderRequests, BoxError> {
         // get the destination chain from the event
-        let dest_chain = self.chain_from_client(ev.trigger_object.clone().ok_or("event missing object")?.client_id())?;
+        let dest_chain = self.chain_from_client(
+            ev.trigger_object
+                .clone()
+                .ok_or("event missing object")?
+                .client_id(),
+        )?;
 
         // check if a message builder already exists for the object,
         // return if the event is old or for a "lower" state.
@@ -215,22 +200,15 @@ where
             .0)
     }
 
-    fn get_message_builder(
-        &mut self,
-        key: &BuilderTrigger<O>,
-    ) -> Option<&mut MessageBuilder<O>> {
+    fn get_message_builder(&mut self, key: &BuilderTrigger) -> Option<&mut MessageBuilder> {
         self.message_builders.get_mut(key)
     }
 
-    fn remove_message_builder(&mut self, key: &BuilderTrigger<O>) -> Option<MessageBuilder<O>> {
+    fn remove_message_builder(&mut self, key: &BuilderTrigger) -> Option<MessageBuilder> {
         self.message_builders.remove(key)
     }
 
-    fn keep_existing_message_builder(
-        &mut self,
-        key: &BuilderTrigger<O>,
-        ev: &ChainEvent<O>,
-    ) -> bool {
+    fn keep_existing_message_builder(&mut self, key: &BuilderTrigger, ev: &ChainEvent) -> bool {
         if let Some(existing_mb) = self.get_message_builder(key) {
             if existing_mb.event.event >= ev.event
                 || existing_mb.event.chain_height > ev.chain_height

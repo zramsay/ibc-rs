@@ -6,8 +6,7 @@ use tracing::info;
 
 // event_handler requests to Light Client
 #[derive(Debug, Clone)]
-pub struct LightClientQuery
-{
+pub struct LightClientQuery {
     pub chain: ChainId,
     pub request: LightClientRequest,
 }

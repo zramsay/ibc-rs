@@ -21,20 +21,14 @@ pub enum BuilderEvent {
 }
 
 #[derive(Debug, Clone)]
-pub struct ChainEvent<O>
-where
-    O: BuilderObject,
-{
+pub struct ChainEvent {
     pub trigger_chain: ChainId,
     pub chain_height: Height,
     pub event: BuilderEvent,
-    pub trigger_object: Option<O>,
+    pub trigger_object: Option<Box<dyn BuilderObject>>,
 }
 
-impl<O> ChainEvent<O>
-where
-    O: BuilderObject,
-{
+impl ChainEvent {
     pub fn new_from_ibc_event(trigger_chain: ChainId, event: IBCEvent) -> Result<Self, BoxError> {
         match event.clone() {
             IBCEvent::NewBlock(nb) => Ok(ChainEvent {
@@ -56,27 +50,13 @@ where
                 trigger_object: None,
             }),
             IBCEvent::OpenInitConnection(conn) => Ok(ChainEvent {
-                    trigger_chain,
-                    chain_height: conn.height,
-                    event: BuilderEvent::ConnectionOpenInit,
-                    trigger_object: Some(BuilderObject::new(&event.clone())?),
-                }),
+                trigger_chain,
+                chain_height: conn.height,
+                event: BuilderEvent::ConnectionOpenInit,
+                trigger_object: Some(BuilderObject::new(&event.clone())?),
+            }),
 
             _ => Err("Unrecognized event".into()),
         }
     }
-
-//    pub fn src_query<T>(&self, prove: bool) -> Result<T, BoxError> {
-//        Ok(self
-//            .trigger_object
-//            .ok_or("not applicable")?
-//            .build_ibc_query(self.chain_height, prove))
-//    }
-//
-//    pub fn dest_query<T>(&self, prove: bool) -> Result<T, BoxError> {
-//        Ok(self
-//            .trigger_object
-//            .ok_or("not applicable")?
-//            .build_flipped_ibc_query(Height::from(0), prove))
-//    }
 }
