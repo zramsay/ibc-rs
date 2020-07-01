@@ -12,7 +12,14 @@ use std::fmt::Debug;
 use std::hash::Hash;
 use tendermint::block::Height;
 
-pub trait BuilderObject: Debug {
+//TODO - maybe move from trait to enum for BuilderObject
+//pub enum BuilderObject {
+//    ClientBuilderObject(ClientBuilderObject),
+//    ConnectionBuilderObject(ConnectionBuilderObject),
+//    ...
+//}
+
+pub trait BuilderObject: Sized {
     fn new(ev: &IBCEvent) -> Result<Self, BoxError>;
     fn client_id(&self) -> ClientId;
     fn client_height(&self) -> Height;
@@ -89,15 +96,7 @@ impl RelayerState {
                 let src_chain_id = mb.event.trigger_chain;
                 let dest_chain_id = mb.dest_chain;
                 if ev.trigger_chain == src_chain_id || ev.trigger_chain == dest_chain_id {
-                    let src_chain = self
-                        .chain_states
-                        .get(&mb.event.trigger_chain)
-                        .ok_or("unknown chain")?;
-                    let dest_chain = self
-                        .chain_states
-                        .get(&mb.dest_chain)
-                        .ok_or("unknown chain")?;
-
+                    let (src_chain, dest_chain) = self.get_src_and_dest_chains(&mb)?;
                     match mb.message_builder_handler(
                         RelayerEvent::ChainEvent(ev.clone()),
                         src_chain,
@@ -112,23 +111,39 @@ impl RelayerState {
         Err("unexpected event".into())
     }
 
+    fn get_src_and_dest_chains(
+        &self,
+        mb: &MessageBuilder,
+    ) -> Result<(&ChainData, &ChainData), BoxError> {
+        Ok((
+            self.chain_states
+                .get(&mb.event.trigger_chain)
+                .ok_or("unknown chain")?,
+            self.chain_states
+                .get(&mb.dest_chain)
+                .ok_or("unknown chain")?,
+        ))
+    }
+
     pub fn query_response_handler(
         &mut self,
         response: &ChainQueryResponse,
     ) -> Result<BuilderRequests, BoxError> {
-        let requests = BuilderRequests::new();
+        let mut merged_requests = BuilderRequests::new();
 
         for (_key, mut mb) in self.message_builders.clone() {
-            if valid_query_response(&response, &mb.src_queries) {
-                mb.src_responses.push(response.clone());
-                // TODO - call the message builder handler for response
-                return Ok(requests);
-            } else if valid_query_response(&response, &mb.dest_queries) {
-                mb.dest_responses.push(response.clone());
-                // TODO - call the message builder handler for response
-                return Ok(requests);
+            // TODO this valid_query_response should be moved to MB event handler in message_builder.rs
+            if valid_query_response(&response, &mb.src_queries) || valid_query_response(&response, &mb.dest_queries) {
+                let (src_chain, dest_chain) = self.get_src_and_dest_chains(&mb)?;
+                match mb.message_builder_handler(
+                    RelayerEvent::QueryEvent(response.clone()),
+                    src_chain,
+                    dest_chain,
+                ) {
+                    Ok(mut requests) => merged_requests.merge(&mut requests),
+                    Err(_) => {},
+                }
             }
-            return Err("No matching request for query response".into());
         }
         Err("No matching message builder for query response".into())
     }

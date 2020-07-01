@@ -1,4 +1,5 @@
 use crate::chain::tendermint::TendermintChain;
+use crate::chain_event::ChainEvent;
 use crate::config::Config;
 use crate::query::ibc_query;
 use ::tendermint::chain::Id as ChainId;
@@ -9,7 +10,6 @@ use relayer_modules::ics24_host::identifier::{ClientId, ConnectionId};
 use tendermint::block::Height;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tracing::info;
-use crate::chain_event::ChainEvent;
 
 /// The Querier handles query requests from the event handler.
 pub struct ChainQueryHandler {
@@ -145,7 +145,13 @@ pub(crate) fn valid_query_response(
     false
 }
 
-pub fn chain_query_consensus_state_request(chain: ChainId, chain_height: Height, client_id: ClientId, consensus_height: Height, prove: bool) -> ChainQueryRequestParams {
+pub fn chain_query_consensus_state_request(
+    chain: ChainId,
+    chain_height: Height,
+    client_id: ClientId,
+    consensus_height: Height,
+    prove: bool,
+) -> ChainQueryRequestParams {
     let p = ClientConsensusParams {
         client_id,
         consensus_height,
@@ -164,6 +170,9 @@ pub fn chain_query_object_request(event: &ChainEvent, prove: bool) -> ChainQuery
     unimplemented!()
 }
 
-pub fn chain_query_flipped_object_request(event: &ChainEvent, prove: bool) -> ChainQueryRequestParams {
+pub fn chain_query_flipped_object_request(
+    event: &ChainEvent,
+    prove: bool,
+) -> ChainQueryRequestParams {
     unimplemented!()
 }

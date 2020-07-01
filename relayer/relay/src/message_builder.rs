@@ -1,7 +1,10 @@
 use crate::chain_event::{BuilderEvent, ChainEvent};
-use crate::chain_querier::{ChainQueryRequestParams, ChainQueryResponse, chain_query_consensus_state_request, chain_query_object_request, chain_query_flipped_object_request};
+use crate::chain_querier::{
+    chain_query_consensus_state_request, chain_query_flipped_object_request,
+    chain_query_object_request, ChainQueryRequestParams, ChainQueryResponse,
+};
 use crate::event_handler::RelayerEvent;
-use crate::light_client_querier::{LightClientQuery, light_client_headers_request};
+use crate::light_client_querier::{light_client_headers_request, LightClientQuery};
 use crate::relayer_state::{BuilderObject, ChainData};
 use ::tendermint::chain::Id as ChainId;
 use anomaly::BoxError;
@@ -30,9 +33,6 @@ pub struct MessageBuilder {
     pub event: ChainEvent,
     pub dest_chain: ChainId,
 
-    // wait for src chain to get to src_height
-    src_height_needed: Height,
-
     // pending queries
     pub src_queries: Vec<ChainQueryRequestParams>,
     pub src_responses: Vec<ChainQueryResponse>,
@@ -50,7 +50,6 @@ impl MessageBuilder {
             fsm_state: BuilderState::Init,
             event: event.clone(),
             dest_chain,
-            src_height_needed: Height::from(0),
             src_queries: vec![],
             src_responses: vec![],
             dest_queries: vec![],
@@ -108,7 +107,8 @@ impl MessageBuilder {
                         self.dest_client_request = light_client_headers_request(
                             self.dest_chain,
                             b_height,
-                        b_client_on_a_height);
+                            b_client_on_a_height,
+                        );
 
                         // return requests to event handler for IO
                         new_state = BuilderState::UpdatingClientBonA;
@@ -164,14 +164,16 @@ impl MessageBuilder {
                     let a_client_on_b_height = b.client_heights[&obj.counterparty_client_id()];
 
                     if a_height > self.event.chain_height {
-                        if a_client_on_b_height <= self.event.chain_height &&
-                            self.src_client_request.is_none() {
+                        if a_client_on_b_height <= self.event.chain_height
+                            && self.src_client_request.is_none()
+                        {
                             // if client on destination needs update and we haven't requested them already,
                             // request header(s) from local source light client.
                             self.src_client_request = light_client_headers_request(
-                                    self.event.trigger_chain,
-                                    self.event.chain_height.increment(),
-                                    a_height);
+                                self.event.trigger_chain,
+                                self.event.chain_height.increment(),
+                                a_height,
+                            );
 
                             new_state = BuilderState::UpdatingClientBonA;
                             requests = BuilderRequests {
@@ -182,20 +184,26 @@ impl MessageBuilder {
                             self.event.chain_height = Height(u64::from(a_client_on_b_height) - 1);
                             // plan queries for the source chain
                             // query consensus state if required by the event
-                            if crate::chain_event::requires_consensus_proof_for_b_client_on_a(chain_ev.event) {
+                            if crate::chain_event::requires_consensus_proof_for_b_client_on_a(
+                                chain_ev.event,
+                            ) {
                                 self.src_queries.push(chain_query_consensus_state_request(
                                     self.event.trigger_chain,
                                     self.event.chain_height,
-                                    obj.client_id().clone(), a.client_heights[&obj.client_id()],
+                                    obj.client_id().clone(),
+                                    a.client_heights[&obj.client_id()],
                                     true,
                                 ))
                             }
                             // query the builder object, e.g. connection, channel, etc
-                            self.src_queries.push(chain_query_object_request(&self.event, true));
+                            self.src_queries
+                                .push(chain_query_object_request(&self.event, true));
 
                             // query object on destination chain if applicable (e.g. for connections
                             // and channels).
-                            if let Some(dest_query) = chain_query_flipped_object_request(&self.event, false) {
+                            if let Some(dest_query) =
+                                chain_query_flipped_object_request(&self.event, false)
+                            {
                                 self.src_queries.push(dest_query);
                             }
 
@@ -214,7 +222,7 @@ impl MessageBuilder {
                     }
                 }
             }
-            _ => {}
+            _ => Err("event is ignored".into()),
         }
         Ok((new_state, requests))
     }

@@ -70,8 +70,7 @@ pub(crate) fn requires_updated_b_client_on_a(event: BuilderEvent) -> bool {
 
 pub(crate) fn requires_consensus_proof_for_b_client_on_a(event: BuilderEvent) -> bool {
     match event {
-        BuilderEvent::ConnectionOpenInit
-        | BuilderEvent::ConnectionOpenTry => true,
+        BuilderEvent::ConnectionOpenInit | BuilderEvent::ConnectionOpenTry => true,
         _ => false,
     }
 }

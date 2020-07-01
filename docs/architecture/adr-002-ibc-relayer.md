@@ -263,7 +263,7 @@ To start the relayer:
 The command performs the validation as described above and then starts the relayer.
 
 #### Query
-Most of the queries performed while relaying are also available from the CLI. 
+Most of the queries performed while relaying are also available from the CLI. For example:
 
 `relayer -c <config_file> query client state <chain> <client_id> [-h <chain_height>] [-p <proof_required>]`
 
@@ -271,7 +271,9 @@ The command queries the full client state of `<client_id>` on `<chain>` at `<hei
 
 `relayer -c <config_file> query client consensus <chain> <client_id> <consensus_height> [-h <chain_height>] [-p <proof_required>]`
 
-The command queries the consensus state of `<client_id>` at height `<consensus_height>` on `<chain>` at `<height>`, with or without proof depending on the `<proof_required>` flag. Default `<height>` is latest state and `<proof_required>` is `true`. 
+The command queries the consensus state of `<client_id>` at height `<consensus_height>` on `<chain>` at `<height>`, with or without proof depending on the `<proof_required>` flag. Default `<height>` is latest state and `<proof_required>` is `true`.
+
+Other CLIs are available but not described here. 
 
 ### Relayer Queries
 The relayer queries chain state in order to build the IBC messages. It is expected that each chain type provides implementations of these queries. Initial Rust relayer implementation will be tested with Cosmos-SDK/Tendermint chains, and while some of the IBC-Modules functionality in Rust is not required (e.g. handler functions), a "query" crate should be available for the relayer. 
@@ -289,29 +291,33 @@ The following queries are required:
 - ...more to be added
 
 ### Relayer Concurrency Architecture
-The following threads are spawned and execute within the relayer process:
-- one Tendermint full light client thread, per configured configured source chain. For example if A->C and B->C paths are enabled then there will be two light client threads, one for A and one for B. These threads download light client headers (block header and commits), verify them and store them as trusted headers in the per chain stores.
-- one thread for the main relaying functionality, aka relay thread. 
-- one thread to relay notifications from source chain and to generate IBC events to the relay thread.
+The following threads, shown in figure below, are spawned and execute within the relayer process:
+![IBC concurrecny](assets/IBC_concurrency.jpeg)
 
-The figure below shows the interactions for the last two threads. 
-![IBC relayer threads](assets/IBC_relayer_threads.jpeg)
+`config executor` - single thread that runs upon start and 
+ - triggers initiation messages for objects included in the config file. These are disjoint from the chain IBC events, something like `ConnOpenStart` or `ChannOpenStart` that could potentially cause the relayer to build and send `ConnOpenInit` or `ChannOpenInit` messages to the chain. 
+ - performs a poll of all connections, channels and packets as required by its configuration file. It then sends IBC Events as required by the states of the objects queried.
+    
+    This initial bootstrap should work even if these events are received by the `event handler` in the same time with the live chain IBC events. In other words, no synchronization with other threads should be required.
 
-On start:
-1. Communication (channel ?) between the relay and the notification threads is established.
-2. The notification thread registers for IBC events.
-3. The relay thread creates the IBC datagrams for A, for all configuration triggered events, for clients `MsgCreateClient`, `MsgUpdateClient` and
-4. for connections and channels, i.e. `MsgConnOpenInit` and `MsgChannOpenInit` are sent to chains to initiate connection and channel handshake if required. It then waits for events from the notification thread.
-5. The notification thread queries the source chain A at latest height and 
-6. sends IBC events to the relay thread. Then it waits for notifications from A.
-7. For each event related to X (connection, channel or packets), the relay thread queries the client and X state on destination B, and
-8. the X state on source chain A.
-9. With the information collected in previous steps, the relay thread creates a buffer of messages destined to destination B.
-10. When the notification thread receives an IBC notification for X it sends it to the relay thread.
-11. Steps 11-14 are the same as 6-9 above.
+`chain monitor` - one thread per chain that registers with the chain and forwards the notification messages to the `event handler`. Currently the relayer registers for `Tx` and `Block` notifications. It then extracts the IBC events from the `Tx` and generates a "NewBlock" event also for the block. Note that a single notification may include multiple IBC Events. Also they arrive before the `NewBlock` event.
 
-Initial version will have a single relay thread for all configured paths. Temporary threads may be created for the source and destination queries required. 
-Future versions may create multiple relay threads. One possibility is to create one for each destination chain Z, responsible for relaying over *->Z paths. Or have a thread pool, selecting an available thread for relaying to a given destination. The notification thread will route the IBC events to the proper thread. Multiple notification threads, e.g. per source, should also be considered.
+`chain querier` - these should be short lived threads that block on ABCI queries and send the response back to event handler. Or maybe this is per chain thread in first release? Event relayer should not block on full channel to this thread.
+
+`chain light client` - one thread per chain that receives relayer requests, downloads and verifies headers, and returns the minimal header set in the response. In addition this thread should ensure latest locally stored state does not expire, i.e. when some timer fires it fetches and verifies the latest header. Timeout should be a fraction of the trusting period. Timer should be reset by the on-demand relayer requests. 
+
+`chain tx` - per chain thread that submits IBC messages and packets to the chain. Some sort of confirmation is expected but we need still to clarify if and how the relayer will act on this, or waits for an IBC event for confirmation, or times out.
+
+`relayer thread` - one global thread that includes the:
+
+- `event handler` that:
+   - deconstructs the IBC event vector from the monitor and sends individual events to the `message builder`
+   - receives responses from queriers and light clients, and forwards them to the `message builder`
+   - receives requests from the `message builder` and forwards them to the appropriate querier , light client or tx threads
+- `message builder` - runs within the same context of the event handler. There is one per builder object, i.e. instances of connections, channels and packets. It implements an FSM that triggers new queries as required, deals with "conflicting" events caused by race conditions. 
+    
+    Note: the CPU load is minimum and will probably be fine even when we add the (succinct) proof verification later. The IO performed by the `event handler` is also minimal as it involves only inter-thread communication...again if no blocking channels. Otherwise we revise.
+
 
 ### Relayer Algorithm
 
@@ -319,15 +325,9 @@ A relayer algorithm is described in [relayer algorithm described in IBC Specifig
 
 This section describes some of the details of the realy thread algorithm in the Rust implementation. Inputs are the IBC Events and the events of interest are described in Appendix A.
 
-At high level, for each event from a source chain, the relayer:
-- queries client, connection, channels and/or packet related state on source and destination chains,
-- creates new datagrams if needed, 
-- batches multiple datagrams in single transaction, 
-- signs and submits these transactions to the destination.
-
 #### Proofs
 The relayer must include proofs in some datagrams as required by the IBC handlers. There are two types of proofs:
-- proof of some local state on source chain (A). For example, a proof of correct connection state (`ProofInit`, `ProofTry`, `ProofAck`) is included in some of the connection handshake datagrams. The `ConnOpenTry` message includes the `ProofInit` that is obtained from chain A where the connection should be in `INIT` state and have certain local and counterpary identifiers. The message specific sections below go in more details. 
+- proof of some local state on source chain (A). For example, a proof of correct connection state (`ProofInit`, `ProofTry`, `ProofAck`) is included in some of the connection handshake datagrams. The `ConnOpenTry` message includes the `ProofInit` that is obtained from chain A where the connection should be in `INIT` state and have certain local and counterpary identifiers. 
 - proof that the chain A's IBC client `clB` is updated with a consensus state and height that have been stored on chain B.
 - these proofs are verified on chain B against the consensus state stored by the A client at `proof_height`.
 
@@ -369,300 +369,172 @@ According to the proposal here, the relayer should:
 - send zero or more `MsgUpdateClient` datagrams and the `MsgX{X, p, h}` in a transaction to B
 - if the transaction is successful or `MsgX..` failed, then "consume" the `Ev{X,..}` 
   - if `MsgX` fails there is nothing that can be done, another relayer must have submitted first
-- else raise again the event at `hA-1` if one not already there
-- the effect of this is that a new query is made at `hA-1` and since the consensus state at `hA` exists on B, only `MsgX` needs to be sent out 
+- else query again X at `hA-1` and send `MsgX{X, p, hA}`
 
-#### Connection Messages
-The relayer queries the source and destination chains of the relaying paths in order to determine if connection handshake datagrams should be sent to destination chains.
+#### Event Handler and Message Builders
+These contain the main relaying logic.
 
-##### Connection Query
-The following structures pertain to connection queries and should be detailed in [IBC-Modules-Rust-ADR]. 
-The structures are shown here for reference.
+##### Event Handler
+Receives different event and message types from the other threads. 
 
 ```rust
-pub struct Counterparty {
-	pub client_id:      ClientId,            
-	pub connection_id:  ConnectionId,           
-	pub prefix:         CommitmentRoot,
-}
-
-pub struct ConnectionEnd {
-	pub state:          ConnectionState,
-    pub Id:             ConnectionId,
-	pub client_id:      ClientId,            
-	pub counterparty:   Counterparty, 
-	pub versions:       Vec<String>
-}
-
-pub enum ConnectionState {
-    "UNINIT",
-    "INIT",
-    "TRYOPEN",
-    "OPEN",
-}
-
-// ConnectionResponse defines the query response for a connection.
-// It includes the proof and the height at which the proof was retrieved.
-pub struct ConnectionResponse {
-	pub connection:     ConnectionEnd,    
-	pub proof:          Option<CommitmentProof>, 
-    pub proof_path:     CommitmentPath,
-    pub proof_height:   Height,        
+pub enum RelayerEvent {
+    ChainEvent(ChainEvent),
+    QueryEvent(ChainQueryResponse),
+    LightClientEvent(LightClientQueryResponse),
 }
 ```
 
-#### Connection Relaying
-
-The figure below shows the four connection handshake message types that can be created during a relay cycle (see the Relayer box and the four actions). For each message the queries (light grey arrows) and expected states on `A` and `B` are shown. For example, if the connection on A is in `OPEN` state and on B in `TRYOPEN`, the relayer will send a transaction to B including the `ConnOpenConfirm` datagram. Once processed on B, the state of connection changes from `TRYOPEN` to `OPEN`.
-
-![IBC connection handshake relay](assets/IBC_conn_handshake_relay.jpeg)
-
-##### MsgConnectionOpenInit
-The `MsgConnectionOpenInit` message is used to initialize a connection. This is done when the relay thread starts, after loading the configuration that includes the connection information and before entering its event loop. In this section it is assumed the message is relayed to A.
+- The `ChainEvent` refers to IBC events received from the monitor threads. The raw events received from cosmos-sdk chains include a height and some fields. 
 ```rust
-pub struct MsgConnectionOpenInit {
-    pub connection_id:  ConnectionId, // connAtoB
-	pub client_id:      ClientId,     // clB       
-	pub counterparty:   Counterparty, // {ClientID: clA, ConnectionID: connBtoA, Prefix: "B_store">
-	pub signer:         AccAddress 
+pub enum IBCEvent {
+    NewBlock(NewBlock),
+    CreateClient(ClientEvents::CreateClient),
+    UpdateClient(ClientEvents::UpdateClient),
+    //...
+    OpenInitConnection(ConnectionEvents::OpenInit),
+    OpenTryConnection(ConnectionEvents::OpenTry),
+    //..
+    OpenInitChannel(ChannelEvents::OpenInit),
+    //..
+    SendPacketChannel(ChannelEvents::SendPacket),
+    ReceivePacketChannel(ChannelEvents::ReceivePacket),
+    //..
 }
 ```
-The comments show the values of the fields for the diagram above. 
+There is some processing that needs to be done by the event handler to present an IBC Event as a `ChainEvent` that looks like this: 
 
-The relayer creates and forwards this message only if it has been explicitly configured with the connection information (see `connections.src` and `connections.dest`sections of the configuration file).
-
-In order to create a `MsgConnectionOpenInit` the relayer recreates the `ConnectionEnd` from the configuration, as it will be stored on A. The steps are:
-- create the `ConnectionEnd` for the B->A path
 ```rust
- let connection_a = getConfiguredConnection(A, B, ..);
-```
-- query connection state on chain A and if it already exist then continue with next event
-```rust
-let existing_a = ibc_query_connection(chainA, connection_a);
-if existing_a.state != "UNINIT" {
-  continue;
-} 
-```
-- create the message 
-```rust
-let init_msg = MsgConnectionOpenInit {
-    connection_id:  connection_a.connection_id,
-    client_id:      connection_a.client_id,
-    counterparty:   Counterparty {
-                      ClientID:       connection_a.counterparty.client_id, 
-                      connection_id:  connection_a.counterparty.connection_id,
-                      prefix:         config(B).store_prefix,
-                    }
-    Signer:         config(A).signer,   
+pub enum BuilderEvent {
+    NewBlock,
+    CreateClient,
+    UpdateClient,
+    ConnectionOpenInit,
+    ConnectionOpenTry,
+    //..
 }
-```  
-- send `init_msg` in a transaction to B
 
-##### MsgConnectionOpenTry
-The `MsgConnectionOpenTry` defines the message sent by the relayer to try to open a connection. In this section it is assumed to be relayed to B.
-
-```rust
-pub struct MsgConnectionOpenTry {
-    pub connection_id:    ConnectionId, // connBtoA
-	pub client_id:        ClientId,     // clA       
-	pub counterparty:     Counterparty, // {ClientID: clB, ConnectionID: connAtoB, Prefix: "A_store">
-    pub counterparty_versions:   Vec<String>,       
-	pub proof_init:       CommitmentProof, // proof that connAtoB connection end is stored on Chain A 
-	pub proof_consensus:  CommitmentProof, // proof that on A at proof_height (hA), the B client has 
-                                           // stored B's consensus state at consensus_height (hB)
-	pub proof_height:     Height,          // hA, height of A at which relayer retrieved proof_init
-	pub consensus_height: Height,          // hB
-	pub signer:           AccAddress, 
+pub struct ChainEvent {
+    pub trigger_chain: ChainId,
+    pub chain_height: Height,
+    pub event: BuilderEvent,
+    pub trigger_object: BuilderObject,
 }
 ```
-The comments show the values of the fields for the diagram above.
-Note:
-- `proof_height` is the height of chain A when relayer created the `proof_init`, hA in the diagram.
-- `consensus_height` is the latest height of chain B that chain A has stored in its client `clB` at the time the relayer queried that client, `hB` in the diagram
+where `BuilderObject` could be a generic, trait or enum that refers to an object in an abstract way. Concretely, this can be a connection, channel or packet.
 
-The relayer creates a `MsgConnectionOpenTry` for the A->B relay path when an IBC event notification is received.
-The steps are:
-- let `connAtoB` be the connection identifier on A,`hx` the height when the event occurred and `clA` the client ID of A on B
-- query last client state height on B
+- The query events are responses from the requests sent by the relayer thread to queriers. The responses should identify the trigger request.
+
 ```rust
-let ha_prime = ibc_query_client_state(chainB, 0).height;
-```
-- create `UpdateClientMsg`(s) for `clA` on chain B if required (i.e. if `hx` is higher than latest height of `clA` on B)
-```rust
- let h = max(hx, ha_prime);
- let headers = get_minimal_set(h, ha_prime);
- let client_msgs = updateClientMsgs(clA, headers, signer);
-```
-- send `client_msgs` to B
-- query latest height `ha` of A and wait for `ha > h` (Rust TODO)
-- query connection with proof at `h` on chain A and if it is not in proper state then continue with the next event
-```rust
- let query_response = ibc_query_connection_with_proof(chainA, connAtoB, h);
- if query_response.connection.state != "INIT" { 
-   continue;
- }
- let connection_a = query_response.connection;
- let proof_init = query_response.proof;
- let proof_height := query_response.proof_height;
- assert(proof_height = h);
-``` 
-- query the consensus state stored by client `clB` on A
-```rust
- let consensus_response = ibc_query_consensus_with_proof(chainA, connection_a.client_id);
- let proof_consensus = consensus_response.proof;
- let consensus_height = consensus_response.proof_height;
-```
-- create the `MsgConnectionOpenTry` message with the information collected above.
-```rust
-let try_msg = MsgConnectionOpenTry {
-    connection_id:  connBtoA,
-    client_id:      clA,
-    counterparty:   Counterparty{
-                      client_id:       connection_a.client_id, 
-                      connection_id:   connAtoB,
-                      prefix:          config(A).store_prefix,
-                    }
-    proof_init,
-    proof_consensus,
-    proof_height,
-    consensus_height,
-    signer:                 config.B.Signer(),    
+pub struct ChainQueryRequestParams {
+    chain: ChainId,
+    chain_height: Height,
+    prove: bool,
+    request: ChainQueryRequest,
 }
-```
-- send `try_msg` to B
 
-When `MsgConnectionOpenTry` is processed on B, the message handler: 
-- checks that `consensus_height` is valid (smaller or equal than chain B's current height) and within trusting period,
-- client `clA` verifies `proof_consensus` for B's consensus state at `consensus_height` and 
-- client `clA` verifies `proof_init` for the `ConnectionEnd`object that B expects to be present on A at `proof_height`. 
-The relayer may also perform these verifications before submitting the transaction.
-
-##### MsgConnectionOpenAck
-(WIP) - needs to be updated with correct query sequence
-
-`MsgConnectionOpenAck` defines the message sent by the relayer to chain A to acknowledge the change of connection state to `TRYOPEN` on Chain B. 
-
-```rust
-pub struct MsgConnectionOpenAck {
-    pub connection_id:      ConnectionId,   // connAtoB
-	pub proof_try:          CommitmentProof, // proof that connBtoA on Chain B is in TRYOPEN state
-	pub proof_consensus:    CommitmentProof, // proof that on B at proof_height (hB), the A client has 
-                                           // stored A's consensus state at consensus_height (hA)
-	pub proof_height:     Height,          // hB, height of B at which relayer retrieved proof_try
-	pub consensus_height: Height,          // hA
-    pub versions:   <String>,       
-	pub signer:           AccAddress, 
+pub enum ChainQueryRequest {
+    ClientConsensusParams(ClientConsensusParams),
+    ConnectionParams(ConnectionParams),
+    //..
 }
-```
-The comments show the values of the fields for the diagram above.
-Note:
-- `proof_height` is the height of chain B when relayer created the `proof_try`, hB in the diagram.
-- `consensus_height` is the latest height of chain A that chain B has stored in its client `clA` at the time the relayer queried that client, `hA` in the diagram
 
-The relayer creates a `MsgConnectionOpenAck` for the B->A relay path when an IBC event notification is received or when chain B is scanned. The steps are:
-- let `connBtoA` be the connection identifier on B
-- query connection with proof on chain B and if it is not in proper state then continue with next event
-```rust
- let query_response = ibc_query_connection_with_proof(chainB, connBtoA);
- if query_response.connection.state != "TRYOPEN" { 
-   continue;
- }
- let connection_b = query_response.connection;
- let proof_try = query_response.proof;
- let proof_height := query_response.proof_height;
-``` 
-- query connection on chain A and validate its state:
-```rust
- let connAtoB = connection_b.counterparty.connection_id;
- let connection_a = ibc_query_connection(chainA, connAtoB);
- if connection_a.state != "INIT"  && connection_a.state != "TRYOPEN" {
-   continue;
- }
-```
-- create `UpdateClientMsg` for `clB` on chain A if required (i.e. if `proof_height` is higher than latest height of `clB` on A)
-```rust
- let client_msg = MsgUpdateClient::new(connection_a.client_id, header, signer);
-```
-- query the consensus state stored by client `clA` on B:
-```rust
- let consensus_response = ibc_query_consensus_with_proof(chainB, connection_b.client_id);
- let proof_consensus = consensus_response.proof;
- let consensus_height = consensus_response.proof_height;
-```
-- create the `MsgConnectionOpenAck` message with the information collected above
-```rust
-let ack_msg = MsgConnectionOpenAck {
-    connection_id:  connAtoB,
-    proof_try,
-    proof_consensus,
-    proof_height,
-    consensus_height,
-    signer:         config.A.Signer(),    
+pub struct ChainQueryResponse {
+    pub trigger: ChainQueryRequestParams,
+    pub response: QueryResponse,
 }
-```
-- send `client_msg` and `ack_msg` in a transaction to A
 
-##### MsgConnectionOpenConfirm
-(WIP) - needs to be updated with correct query sequence
-
-`MsgConnectionOpenConfirm` defines the message sent by the relayer to chain B to confirm the opening of a connection on chain A.
-
-```rust
-pub struct MsgConnectionOpenConfirm {
-	pub connection_id:      ConnectionId,   // connBtoA
-	pub proof_confirm:      CommitmentProof,// proof that connAtoB on chain A is in OPEN state
-	pub proof_height:       Height,         // hA, height of A at which relayer retrieved the proof_confirm
-	pub signer:           AccAddress, 
+pub enum QueryResponse {
+    ClientConsensusState(ConsensusStateResponse<ConsensusState>),
+    Connection(ConnectionResponse),
+    //
 }
 ```
 
-The relayer creates a `MsgConnectionOpenConfirm` for the A->B relay path when an IBC event notification is received or when chain A is scanned. The steps are:
-- let `connAtoB` be the connection identifier on A
-- query connection with proof on chain A and if it is not in proper state then continue with next event
+- The light client events are responses from the requests sent by the relayer thread to the light client thread.
+
 ```rust
- let query_response = ibc_query_connection_with_proof(chainA, connAtoB);
- if query_response.connection.state != "OPEN" { 
-   continue;
- }
- let connection_a = query_response.connection;
- let proof_confirm = query_response.proof;
- let proof_height = query_response.proof_height;
-``` 
-- query connection on chain B and validate its state:
-```rust
- let connBtoA = connection_a.counterparty.connection_id;
- let connection_b = ibc_query_connection(chainB, connBtoA);
- if connection_b.state != "INIT"  && connection_b.state != "TRYOPEN" {
-   continue;
- }
-```
-- create `UpdateClientMsg` for `clA` on chain B if required (i.e. if `proof_height` is higher than latest height of `clA` on B)
-```rust
- let client_msg = MsgUpdateClient::new(connection_b.client_id, header, config.B.Signer());
-```
-- create the `MsgConnectionOpenConfirm` message with the information collected above
-```rust
-let confirm_msg = MsgConnectionOpenAck {
-    connection_id:  connBtoA,
-    proof_confirm,
-    proof_height,
-    signer:         config.B.Signer(),    
+pub enum LightClientRequest {
+    ConsensusStateRequest(ConsensusStateRequestParams),
+    //..
+}
+
+pub struct ConsensusStateRequestParams {
+    chain: ChainId,
+    cs_height: Height,
+    last_cs_height: Height,
+}
+
+pub struct LightClientQueryResponse {
+    trigger: LightClientRequest,
+    response: LightClientResponse,
+}
+
+pub enum LightClientResponse {
+    ConsensusStateUpdates(ConsensusStateUpdatesResponse),
+}
+
+pub struct ConsensusStateUpdatesResponse {
+    headers: Vec<Header>,
 }
 ```
-- send `client_msg` and `confirm_msg` in a transaction to A
 
-#### Channels
-(WIP)
-The channel handshake messages are relayed in a similar way as the connection ones. In addition, checks on the state of the underlying connection is performed.
+The event handler maintains state information about chains, including latest chain height and heights of IBC clients hosted by those chains. This is updated by `NewBlock`, `CreateClient` and `UpdateClient` IBC events.
+```rust
+pub struct ChainData {
+    /// Chain's height
+    height: Height,
+    /// Heights of clients instantiated on chain
+    client_heights: HashMap<ClientId, Height>,
+}
+```
 
-#### Packet, Timeouts and Acknowledgments
-(WIP)
-Application packets are not stored in the chain state, only a cryptographic commitment is stored. 
-The relayer has to query the chain's logging system to get the packet data for a given source port and channel. 
-The result of the query includes among others:
- - the source port and channel identifiers
- - the sequence number
-These are used to create the packet's commitment path which is then used in a state query to get the packet commitment.
+In addition, a collection of "message builders" is maintained. A builder is associated with a connection, channel or packet. A message builder is instantiated by an IBC event. There will be at most one builder for each unique object instance. 
+A message builder has a unique key:
+```rust
+pub struct BuilderTrigger {
+    chain: ChainId,
+    obj: BuilderObject,
+}
+```
+The event handler decides if an event needs to be processed by a given builder based on some rules. In general the event handler should not send irrelevant events to message builders. These are events for different builder object types or different object instances. For example channel events should not be sent to connection builders. And events for `connection1` should not be sent to the builder of messages for `connection2`. 
+More than that, with the proposal here, the handler should only send a builder object event once and only once, at initial creation of message builder. Here is the reasoning:
+The event handler decides when a message builder is created or removed based on some simple rules.
+Assume `Ev:(A, event, objAtoB)` means `event` is received from chain `A` for `objAtoB`.
+- if a builder doesn't exist for `(A, objAtoB)` or `(B, objBtoA)` then a builder is created and `event` is stored as part of the builder state
+- if a message builder exists for `(A, objAtoB)` or `(B, objBtoA)`, and its associated event `event'` is same or higher (`>=`) than `event` then the existing builder is kept and the incoming event is discarded. Note: event order for handshake messages is: `OpenInit < OpenTry < OpenAck < OpenConfirm`
+- else the existing builder is removed and a new builder is created for the "higher" event
+
+The reasoning behind these rules is the following:
+ - connections and channels - these are viewed as end-to-end from the event handler perspective. If `X` is the connection state on `A` and `Y` is the connection state on `B`, only one builder should exist associated with the end with state `max(X, Y)`. 
+ TODO: Add examples, maybe in a table form.
+ - packets - (to be added but similar)
+ 
+ In summary, the event handler creates a message builder for a given builder object instance once. After this it will send the following events for processing:
+ - `NewBlock`, `CreateClient`, `UpdateClient` chain events 
+ - `QueryResponse` 
+ - `LightClientQueryResponse`
+The event handler may remove the builder before it finishes its task.
+
+##### Message Builder
+Receives and acts on the different events received from the event handler. The proposal here is to design and codify a single FSM for all object types. An example is shown below illustrating an FSM applicable to all object types.
+
+![IBC concurrecny](assets/IBC_message_builder.jpeg)
+
+Shown in italics are states and queries applicable only to `ConnOpenInit` event (with eventual creation of `MsgConnOpenTry`) and `ConnOpenTry` event (with eventual creation of `MsgConnOpenAck`) that both require an optional update of `B` client on source chain `A` and a mandatory consensus state proof included in the message. All the other builders will not follow those states. 
+
+In general the more complex logic is around determining the height of client consensus states required and ensuring the corresponding updates are installed on chain. This logic is common regardless of the message being built.
+
+Following sections detail the event handling in different states. In general a builder for messages associated with object X should only receive relevant events since, as described above, filtering is performed by the event handler.
+
+##### Message Builder for Connection
+(WIP) - add table showing handling of events for connection builders
+
+##### Message Builder for Channel
+(WIP) - add table showing handling of events for channel builders
+
+##### Message Builder for Packets
+(WIP) - add table showing handling of events for channel builders
 
 ## Inter-relayer Coordination
 Multiple relayers may run in parallel and, while it is expected that they relay over disjoint paths, it could be the case that they may submit same transactions to a chain. In this case only the first transaction succeeds while subsequent fail causing loss of fees. Ideally some coordination would be in place to avoid this but this is out of scope of this document.

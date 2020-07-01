@@ -79,13 +79,16 @@ impl LightClientQueryHandler {
     }
 }
 
-pub fn light_client_headers_request(from: ChainId, cs_height: Height, base_cs_height: Height) -> Option<LightClientQuery> {
+pub fn light_client_headers_request(
+    from: ChainId,
+    cs_height: Height,
+    base_cs_height: Height,
+) -> Option<LightClientQuery> {
     Option::from(LightClientQuery {
         chain: from,
-        request: LightClientRequest::ConsensusStateRequest(
-            ConsensusStateRequestParams::new(
-                cs_height, base_cs_height,
-            ),
-        ),
+        request: LightClientRequest::ConsensusStateRequest(ConsensusStateRequestParams::new(
+            cs_height,
+            base_cs_height,
+        )),
     })
 }
