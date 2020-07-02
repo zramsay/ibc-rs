@@ -72,16 +72,16 @@ impl EventHandler {
                         info!("Chain {} pushed {}", events.0, event.to_json());
                         //continue;
                     }
-                    let _handle = self
-                        .event_handler(RelayerEvent::ChainEvent(
-                            ChainEvent::new_from_ibc_event(events.0, event).unwrap(),
-                        ))
-                        .await;
+                    if let Ok(ev) = ChainEvent::new_from_ibc_event(events.0, event) {
+                        let _handle = self.event_handler(RelayerEvent::ChainEvent(ev)).await;
+                    }
                 }
             }
-            if let Some(event) = self.query_response_rx.recv().await {
-                let _handle = self.event_handler(RelayerEvent::QueryEvent(event));
-            }
+
+            // TODO Move to crossbeam so we can select?
+            // if let Some(event) = self.query_response_rx.recv().await {
+            //     let _handle = self.event_handler(RelayerEvent::QueryEvent(event));
+            // }
         }
     }
 
@@ -89,7 +89,7 @@ impl EventHandler {
         match event {
             RelayerEvent::ChainEvent(chain_event) => {
                 match self.ibc_event_handler(chain_event).await {
-                    Ok(()) => debug!("Successful handling of event\n"),
+                    Ok(()) => debug!("Successful handling of chain event\n"),
                     Err(e) => debug!("Handling of event returned {}\n", e),
                 }
             }
@@ -105,7 +105,7 @@ impl EventHandler {
 
     async fn ibc_event_handler(&mut self, ev: ChainEvent) -> Result<(), BoxError> {
         match ev.event {
-            BuilderEvent::NewBlock => self.new_block_handler(ev)?,
+            BuilderEvent::NewBlock => self.new_block_handler(ev).await?,
             BuilderEvent::CreateClient | BuilderEvent::UpdateClient => self.client_handler(ev)?,
             BuilderEvent::ConnectionOpenInit => self.handshake_event_handler(&ev).await?,
 
@@ -114,8 +114,10 @@ impl EventHandler {
         Ok(())
     }
 
-    fn new_block_handler(&mut self, n: ChainEvent) -> Result<(), BoxError> {
-        self.relayer_state.new_block_update(n)
+    async fn new_block_handler(&mut self, n: ChainEvent) -> Result<(), BoxError> {
+        let requests = self.relayer_state.new_block_update(n)?;
+        self.send_builder_requests(requests).await?;
+        Ok(())
     }
 
     fn client_handler(&mut self, ev: ChainEvent) -> Result<(), BoxError> {
@@ -124,7 +126,6 @@ impl EventHandler {
 
     async fn query_response_handler(&mut self, r: &ChainQueryResponse) -> Result<(), BoxError> {
         let requests = self.relayer_state.query_response_handler(r)?;
-
         self.send_builder_requests(requests).await?;
         Ok(())
     }

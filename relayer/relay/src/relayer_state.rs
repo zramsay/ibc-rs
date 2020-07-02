@@ -7,9 +7,9 @@ use ::tendermint::chain::Id as ChainId;
 use anomaly::BoxError;
 use relayer_modules::ics24_host::identifier::ClientId;
 use std::collections::HashMap;
-use std::fmt::Debug;
 use std::hash::Hash;
 use tendermint::block::Height;
+use tracing::debug;
 
 #[derive(Debug, Clone, PartialOrd, PartialEq, Eq, Hash)]
 pub struct BuilderTrigger {
@@ -68,90 +68,6 @@ impl RelayerState {
         res
     }
 
-    pub fn new_block_update(&mut self, ev: ChainEvent) -> Result<(), BoxError> {
-        // Iterate over all builders in case some were waiting for this new block
-        let mut merged_requests = BuilderRequests::new();
-        if let Some(BuilderEvent::NewBlock) = Some(ev.event.clone()) {
-            // set the chain's new height
-            self.chain_states
-                .get_mut(&ev.trigger_chain)
-                .ok_or("unknown chain")?
-                .height = ev.chain_height;
-
-            // Iterate over message builders and send the NewBlock event to those with matching
-            // source or destination chains
-            for (_key, mut mb) in self.message_builders.clone() {
-                let src_chain_id = mb.event.trigger_chain;
-                let dest_chain_id = mb.dest_chain;
-                if ev.trigger_chain == src_chain_id || ev.trigger_chain == dest_chain_id {
-                    let (src_chain, dest_chain) = self.get_src_and_dest_chains(&mb)?;
-                    match mb.message_builder_handler(
-                        RelayerEvent::ChainEvent(ev.clone()),
-                        src_chain,
-                        dest_chain,
-                    ) {
-                        Ok(mut requests) => merged_requests.merge(&mut requests),
-                        Err(_) => continue,
-                    }
-                }
-            }
-        }
-        Err("unexpected event".into())
-    }
-
-    fn get_src_and_dest_chains(
-        &self,
-        mb: &MessageBuilder,
-    ) -> Result<(&ChainData, &ChainData), BoxError> {
-        Ok((
-            self.chain_states
-                .get(&mb.event.trigger_chain)
-                .ok_or("unknown chain")?,
-            self.chain_states
-                .get(&mb.dest_chain)
-                .ok_or("unknown chain")?,
-        ))
-    }
-
-    pub fn query_response_handler(
-        &mut self,
-        response: &ChainQueryResponse,
-    ) -> Result<BuilderRequests, BoxError> {
-        let mut merged_requests = BuilderRequests::new();
-
-        for (_key, mut mb) in self.message_builders.clone() {
-            // TODO this valid_query_response should be moved to MB event handler in message_builder.rs
-            if valid_query_response(&response, &mb.src_queries)
-                || valid_query_response(&response, &mb.dest_queries)
-            {
-                let (src_chain, dest_chain) = self.get_src_and_dest_chains(&mb)?;
-                if let Ok(mut requests) = mb.message_builder_handler(
-                    RelayerEvent::QueryEvent(response.clone()),
-                    src_chain,
-                    dest_chain,
-                ) {
-                    merged_requests.merge(&mut requests)
-                }
-            }
-        }
-        Err("No matching message builder for query response".into())
-    }
-
-    pub fn client_handler(&mut self, n: ChainEvent) -> Result<(), BoxError> {
-        if let Some(BuilderEvent::CreateClient) = Some(n.event) {
-            let key = n.trigger_object;
-            *self
-                .chain_states
-                .get_mut(&n.trigger_chain)
-                .ok_or("unknown chain")?
-                .client_heights
-                .entry(key.client_id()?)
-                .or_insert_with(|| Height::from(0)) = key.client_height()?;
-            return Ok(());
-        }
-        Err("unexpected event".into())
-    }
-
     pub fn handshake_event_handler(
         &mut self,
         ev: &ChainEvent,
@@ -179,7 +95,110 @@ impl RelayerState {
             .ok_or("unknown chain")?;
         let dest_chain = self.chain_states.get(&dest_chain).ok_or("unknown chain")?;
 
-        new_mb.message_builder_handler(RelayerEvent::ChainEvent(ev.clone()), src_chain, dest_chain)
+        let requests = new_mb.message_builder_handler(
+            RelayerEvent::ChainEvent(ev.clone()),
+            src_chain,
+            dest_chain,
+        );
+        requests
+    }
+
+    pub fn new_block_update(&mut self, ev: ChainEvent) -> Result<BuilderRequests, BoxError> {
+        // Iterate over all builders in case some were waiting for this new block
+        let mut merged_requests = BuilderRequests::new();
+        if let Some(BuilderEvent::NewBlock) = Some(ev.event.clone()) {
+            // set the chain's new height
+            self.chain_states
+                .get_mut(&ev.trigger_chain)
+                .ok_or("unknown chain")?
+                .height = ev.chain_height;
+
+            for (chid, val) in self.chain_states.clone() {
+                debug!("new chain state {}: height {}", chid, val.height);
+            }
+
+            // Iterate over message builders and send the NewBlock event to those with matching
+            // source or destination chains
+            for (_, mb) in self.message_builders.iter_mut() {
+                let src_chain_id = mb.event.trigger_chain;
+                let dest_chain_id = mb.dest_chain;
+                if ev.trigger_chain == src_chain_id || ev.trigger_chain == dest_chain_id {
+                    let (src_chain, dest_chain) = (
+                        self.chain_states
+                            .get(&src_chain_id)
+                            .ok_or("unknown chain")?,
+                        self.chain_states
+                            .get(&dest_chain_id)
+                            .ok_or("unknown chain")?,
+                    );
+
+                    match mb.message_builder_handler(
+                        RelayerEvent::ChainEvent(ev.clone()),
+                        src_chain,
+                        dest_chain,
+                    ) {
+                        Ok(mut requests) => merged_requests.merge(&mut requests),
+                        Err(_) => {},
+                    }
+                }
+            }
+            return Ok(merged_requests);
+        }
+        Err("unexpected event".into())
+    }
+
+    pub fn query_response_handler(
+        &mut self,
+        response: &ChainQueryResponse,
+    ) -> Result<BuilderRequests, BoxError> {
+        let mut merged_requests = BuilderRequests::new();
+
+        for (_, mb) in self.message_builders.iter_mut() {
+            let src_chain_id = mb.event.trigger_chain;
+            let dest_chain_id = mb.dest_chain;
+            if valid_query_response(&response, &mb.src_queries)
+                || valid_query_response(&response, &mb.dest_queries)
+            {
+                let (src_chain, dest_chain) = (
+                    self.chain_states
+                        .get(&src_chain_id)
+                        .ok_or("unknown chain")?,
+                    self.chain_states
+                        .get(&dest_chain_id)
+                        .ok_or("unknown chain")?,
+                );
+                if let Ok(mut requests) = mb.message_builder_handler(
+                    RelayerEvent::QueryEvent(response.clone()),
+                    src_chain,
+                    dest_chain,
+                ) {
+                    merged_requests.merge(&mut requests)
+                }
+            }
+        }
+
+        Err("No matching message builder for query response".into())
+    }
+
+    pub fn client_handler(&mut self, n: ChainEvent) -> Result<(), BoxError> {
+        if let Some(BuilderEvent::CreateClient) = Some(n.event) {
+            let key = n.trigger_object;
+            *self
+                .chain_states
+                .get_mut(&n.trigger_chain)
+                .ok_or("unknown chain")?
+                .client_heights
+                .entry(key.client_id()?)
+                .or_insert_with(|| Height::from(0)) = key.client_height()?;
+            for (chid, val) in self.chain_states.clone() {
+                debug!(
+                    "new chain state {}: client height {:?}",
+                    chid, val.client_heights
+                );
+            }
+            return Ok(());
+        }
+        Err("unexpected event".into())
     }
 
     fn chain_from_client(&mut self, client_id: ClientId) -> Result<ChainId, BoxError> {

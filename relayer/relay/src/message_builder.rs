@@ -9,11 +9,12 @@ use crate::relayer_state::ChainData;
 use ::tendermint::chain::Id as ChainId;
 use anomaly::BoxError;
 use tendermint::block::Height;
+use tracing::debug;
 
 const MAX_HEIGHT_GAP: u64 = 100;
 
-#[derive(Debug, Clone)]
-enum BuilderState {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BuilderState {
     Init,
     UpdatingClientBonA,
     WaitNextHeightOnA,
@@ -27,7 +28,7 @@ enum BuilderState {
 
 #[derive(Debug, Clone)]
 pub struct MessageBuilder {
-    fsm_state: BuilderState,
+    pub fsm_state: BuilderState,
 
     // the event that created this builder, only its height may change
     pub event: ChainEvent,
@@ -71,6 +72,7 @@ impl MessageBuilder {
             BuilderState::WaitNextHeightOnA => {
                 self.wait_next_src_height_state_handle(event, src_chain, dest_chain)?
             }
+
             //            BuilderState::UpdatingClientBonA => self.handle.update_src_client_state_handle(key, event, chains),
             //            BuilderState::SendingUpdateClientBtoA => self.handle.tx_src_client_state_handle(key, event, chains),
             //            BuilderState::UpdatingClientAonB => self.handle.update_dest_client_state_handle(key, event, chains),
@@ -79,7 +81,13 @@ impl MessageBuilder {
             //            BuilderState::SendingTransactionToB => self.handle.sending_transaction_to_dest_handle(key, event, chains),
             _ => (self.fsm_state.clone(), BuilderRequests::new()),
         };
+        let old_state = self.fsm_state.clone();
         self.fsm_state = new_state;
+
+        if new_state != old_state {
+            debug!("\nXXXX new mb {:?}", self);
+        }
+
         Ok(requests)
     }
 
@@ -168,7 +176,7 @@ impl MessageBuilder {
                             self.src_client_request = light_client_headers_request(
                                 self.event.trigger_chain,
                                 self.event.chain_height.increment(),
-                                a_height,
+                                a_client_on_b_height,
                             );
 
                             new_state = BuilderState::UpdatingClientBonA;
