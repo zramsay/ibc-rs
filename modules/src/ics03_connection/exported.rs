@@ -24,7 +24,7 @@ pub trait ConnectionCounterparty {
     fn validate_basic(&self) -> Result<(), Self::ValidationError>;
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum State {
     Uninitialized = 0,
     Init,

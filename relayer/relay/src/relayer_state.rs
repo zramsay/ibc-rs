@@ -1,43 +1,31 @@
-use crate::chain_event::{BuilderEvent, ChainEvent};
+use crate::chain_event::{BuilderEvent, BuilderObject, ChainEvent};
 use crate::chain_querier::{valid_query_response, ChainQueryResponse};
 use crate::config::{ChainConfig, Config};
 use crate::event_handler::RelayerEvent;
 use crate::message_builder::{BuilderRequests, MessageBuilder};
 use ::tendermint::chain::Id as ChainId;
 use anomaly::BoxError;
-use relayer_modules::events::IBCEvent;
 use relayer_modules::ics24_host::identifier::ClientId;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::hash::Hash;
 use tendermint::block::Height;
 
-//TODO - maybe move from trait to enum for BuilderObject
-//pub enum BuilderObject {
-//    ClientBuilderObject(ClientBuilderObject),
-//    ConnectionBuilderObject(ConnectionBuilderObject),
-//    ...
-//}
-
-pub trait BuilderObject: Sized {
-    fn new(ev: &IBCEvent) -> Result<Self, BoxError>;
-    fn client_id(&self) -> ClientId;
-    fn client_height(&self) -> Height;
-    fn counterparty_client_id(&self) -> ClientId;
-}
-
 #[derive(Debug, Clone, PartialOrd, PartialEq, Eq, Hash)]
 pub struct BuilderTrigger {
     pub chain: ChainId,
-    pub obj: Box<dyn BuilderObject>,
+    pub obj: BuilderObject,
 }
 
 impl BuilderTrigger {
     pub fn from_event(ev: ChainEvent) -> Result<Self, BoxError> {
-        Ok(BuilderTrigger {
-            chain: ev.trigger_chain,
-            obj: ev.trigger_object.ok_or("event missing object")?,
-        })
+        match ev.trigger_object {
+            BuilderObject::ConnectionBuilderObject(_) => Ok(BuilderTrigger {
+                chain: ev.trigger_chain,
+                obj: ev.trigger_object,
+            }),
+            _ => Err("only connection, channels or packets should be triggers for builders".into()),
+        }
     }
 }
 
@@ -133,15 +121,16 @@ impl RelayerState {
 
         for (_key, mut mb) in self.message_builders.clone() {
             // TODO this valid_query_response should be moved to MB event handler in message_builder.rs
-            if valid_query_response(&response, &mb.src_queries) || valid_query_response(&response, &mb.dest_queries) {
+            if valid_query_response(&response, &mb.src_queries)
+                || valid_query_response(&response, &mb.dest_queries)
+            {
                 let (src_chain, dest_chain) = self.get_src_and_dest_chains(&mb)?;
-                match mb.message_builder_handler(
+                if let Ok(mut requests) = mb.message_builder_handler(
                     RelayerEvent::QueryEvent(response.clone()),
                     src_chain,
                     dest_chain,
                 ) {
-                    Ok(mut requests) => merged_requests.merge(&mut requests),
-                    Err(_) => {},
+                    merged_requests.merge(&mut requests)
                 }
             }
         }
@@ -150,14 +139,14 @@ impl RelayerState {
 
     pub fn client_handler(&mut self, n: ChainEvent) -> Result<(), BoxError> {
         if let Some(BuilderEvent::CreateClient) = Some(n.event) {
-            let key = n.trigger_object.ok_or("missing object")?;
+            let key = n.trigger_object;
             *self
                 .chain_states
                 .get_mut(&n.trigger_chain)
                 .ok_or("unknown chain")?
                 .client_heights
-                .entry(key.client_id())
-                .or_insert_with(|| Height::from(0)) = key.client_height();
+                .entry(key.client_id()?)
+                .or_insert_with(|| Height::from(0)) = key.client_height()?;
             return Ok(());
         }
         Err("unexpected event".into())
@@ -168,12 +157,7 @@ impl RelayerState {
         ev: &ChainEvent,
     ) -> Result<BuilderRequests, BoxError> {
         // get the destination chain from the event
-        let dest_chain = self.chain_from_client(
-            ev.trigger_object
-                .clone()
-                .ok_or("event missing object")?
-                .client_id(),
-        )?;
+        let dest_chain = self.chain_from_client(ev.trigger_object.clone().client_id()?)?;
 
         // check if a message builder already exists for the object,
         // return if the event is old or for a "lower" state.
@@ -186,7 +170,7 @@ impl RelayerState {
         // in the handling above.
         let new_mb = self
             .message_builders
-            .entry(key.clone())
+            .entry(key)
             .or_insert_with(|| MessageBuilder::new(ev, dest_chain));
 
         let src_chain = self

@@ -34,7 +34,6 @@ impl ConsensusStateRequestParams {
 #[derive(Debug, Clone)]
 pub struct LightClientQueryResponse {
     // this will change
-    chain: ChainId,
     trigger: LightClientRequest,
     response: LightClientResponse,
 }

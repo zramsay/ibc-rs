@@ -8,7 +8,6 @@ use anomaly::BoxError;
 use serde_derive::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use tendermint::block;
-use tracing::debug;
 
 // TODO - find a better place for NewBlock
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -65,7 +64,6 @@ pub struct UpdateClient {
 impl TryFrom<RawObject> for UpdateClient {
     type Error = BoxError;
     fn try_from(obj: RawObject) -> Result<Self, Self::Error> {
-        debug!("extracting UpdateClient from {:?}", obj);
         Ok(UpdateClient {
             height: obj.height,
             client_id: attribute!(obj, "update_client.client_id"),

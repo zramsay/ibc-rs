@@ -13,6 +13,7 @@
 
 pub mod chain;
 pub mod chain_event;
+pub mod chain_event_block;
 pub mod chain_event_client;
 pub mod chain_event_connection;
 pub mod chain_querier;

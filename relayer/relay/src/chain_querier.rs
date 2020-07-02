@@ -3,6 +3,7 @@ use crate::chain_event::ChainEvent;
 use crate::config::Config;
 use crate::query::ibc_query;
 use ::tendermint::chain::Id as ChainId;
+use anomaly::BoxError;
 use relayer_modules::ics02_client::query::{ConsensusStateResponse, QueryClientConsensusState};
 use relayer_modules::ics03_connection::query::{ConnectionResponse, QueryConnection};
 use relayer_modules::ics07_tendermint::consensus_state::ConsensusState;
@@ -164,15 +165,29 @@ pub fn chain_query_consensus_state_request(
     }
 }
 
-// TODO - depends on builder object implementation
-// may move to chain_event.rs
-pub fn chain_query_object_request(event: &ChainEvent, prove: bool) -> ChainQueryRequestParams {
-    unimplemented!()
+pub fn chain_query_object_request(
+    event: &ChainEvent,
+    prove: bool,
+) -> Result<ChainQueryRequestParams, BoxError> {
+    Ok(ChainQueryRequestParams {
+        chain: event.trigger_chain,
+        chain_height: event.chain_height,
+        prove,
+        request: event.trigger_object.new_query_request()?,
+    })
 }
 
 pub fn chain_query_flipped_object_request(
+    dest_chain: ChainId,
     event: &ChainEvent,
     prove: bool,
-) -> ChainQueryRequestParams {
-    unimplemented!()
+) -> Result<ChainQueryRequestParams, BoxError> {
+    let flipped = event.trigger_object.flipped()?;
+
+    Ok(ChainQueryRequestParams {
+        chain: dest_chain,
+        chain_height: event.chain_height,
+        prove,
+        request: flipped.new_query_request()?,
+    })
 }

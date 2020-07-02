@@ -17,7 +17,6 @@ use futures::future::join_all;
 use relayer::chain_querier::ChainQueryHandler;
 use relayer::light_client_querier::LightClientQueryHandler;
 use relayer_modules::events::IBCEvent;
-use relayer_modules::ics07_tendermint::consensus_state::ConsensusState;
 
 #[derive(Command, Debug, Options)]
 pub struct ListenCmd {

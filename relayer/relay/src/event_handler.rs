@@ -6,7 +6,7 @@ use crate::chain_querier::{ChainQueryRequestParams, ChainQueryResponse};
 use crate::config::Config;
 use crate::light_client_querier::{LightClientQuery, LightClientQueryResponse};
 use crate::message_builder::BuilderRequests;
-use crate::relayer_state::{BuilderObject, RelayerState};
+use crate::relayer_state::RelayerState;
 use ::tendermint::chain::Id as ChainId;
 use anomaly::BoxError;
 use tracing::{debug, info};

@@ -5,7 +5,7 @@ use crate::chain_querier::{
 };
 use crate::event_handler::RelayerEvent;
 use crate::light_client_querier::{light_client_headers_request, LightClientQuery};
-use crate::relayer_state::{BuilderObject, ChainData};
+use crate::relayer_state::ChainData;
 use ::tendermint::chain::Id as ChainId;
 use anomaly::BoxError;
 use tendermint::block::Height;
@@ -95,11 +95,11 @@ impl MessageBuilder {
 
         match event {
             RelayerEvent::ChainEvent(ch_ev) => {
-                let obj = ch_ev.trigger_object.ok_or("event with no object")?;
+                let obj = ch_ev.trigger_object;
 
                 if crate::chain_event::requires_updated_b_client_on_a(ch_ev.event) {
                     let b_height = b.height;
-                    let b_client_on_a_height = a.client_heights[&obj.client_id()];
+                    let b_client_on_a_height = a.client_heights[&obj.client_id()?];
 
                     // check if client on source chain is "fresh", i.e. within MAX_HEIGHT_GAP of dest_chain
                     if Height::from(b_client_on_a_height.value() + MAX_HEIGHT_GAP) <= b_height {
@@ -121,20 +121,20 @@ impl MessageBuilder {
                 }
 
                 if a.height <= self.event.chain_height {
-                    // IBC events typically come before the corresponding NewBlock event and
-                    // is therefore possible that the recorded height of A is smaller (strict) than
+                    // IBC events typically come before the corresponding NewBlock event and it is
+                    // therefore possible that the recorded height of A is smaller (strict) than
                     // the height of the message builder (created by the IBC Event).
                     new_state = BuilderState::WaitNextHeightOnA;
                 } else {
                     // a_height > self.src_height - this is not possible as this means we got events
                     // out of order, i.e. NewBlock(H), IBCEvent(X, h) with h < H
-                    Err("events out of order".into())
+                    return Err("events out of order".into());
                 }
             }
             _ => {}
         }
 
-        Ok((new_state.clone(), BuilderRequests::new()))
+        Ok((new_state, BuilderRequests::new()))
     }
 
     fn wait_next_src_height_state_handle(
@@ -146,11 +146,7 @@ impl MessageBuilder {
         let mut new_state = self.fsm_state.clone();
         let mut requests = BuilderRequests::new();
 
-        let obj = self
-            .event
-            .trigger_object
-            .clone()
-            .ok_or("event with no object")?;
+        let obj = self.event.trigger_object.clone();
 
         match event {
             RelayerEvent::ChainEvent(chain_ev) => {
@@ -161,7 +157,7 @@ impl MessageBuilder {
                     }
 
                     let a_height = a.height;
-                    let a_client_on_b_height = b.client_heights[&obj.counterparty_client_id()];
+                    let a_client_on_b_height = b.client_heights[&obj.counterparty_client_id()?];
 
                     if a_height > self.event.chain_height {
                         if a_client_on_b_height <= self.event.chain_height
@@ -190,22 +186,22 @@ impl MessageBuilder {
                                 self.src_queries.push(chain_query_consensus_state_request(
                                     self.event.trigger_chain,
                                     self.event.chain_height,
-                                    obj.client_id().clone(),
-                                    a.client_heights[&obj.client_id()],
+                                    obj.client_id()?,
+                                    a.client_heights[&obj.client_id()?],
                                     true,
                                 ))
                             }
                             // query the builder object, e.g. connection, channel, etc
                             self.src_queries
-                                .push(chain_query_object_request(&self.event, true));
+                                .push(chain_query_object_request(&self.event, true)?);
 
                             // query object on destination chain if applicable (e.g. for connections
                             // and channels).
-                            if let Some(dest_query) =
-                                chain_query_flipped_object_request(&self.event, false)
-                            {
-                                self.src_queries.push(dest_query);
-                            }
+                            self.src_queries.push(chain_query_flipped_object_request(
+                                self.dest_chain,
+                                &self.event,
+                                false,
+                            )?);
 
                             new_state = BuilderState::QueryingObjects;
                             requests = BuilderRequests {
@@ -218,17 +214,19 @@ impl MessageBuilder {
                         // it is possible to get the new block event immediately after the
                         // trigger event, nothing to do
                     } else {
-                        Err("event suggests that blockchain is decreasing in height".into());
+                        return Err("event suggests that blockchain is decreasing in height".into());
                     }
+                } else {
+                    return Err("event is ignored".into());
                 }
+                Ok((new_state, requests))
             }
             _ => Err("event is ignored".into()),
         }
-        Ok((new_state, requests))
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct BuilderRequests {
     // queries
     pub src_queries: Vec<ChainQueryRequestParams>,
