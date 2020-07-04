@@ -73,6 +73,9 @@ impl From<OpenTry> for IBCEvent {
 pub struct OpenAck {
     pub height: block::Height,
     pub connection_id: ConnectionId,
+    pub client_id: ClientId,
+    pub counterparty_connection_id: ConnectionId,
+    pub counterparty_client_id: ClientId,
 }
 
 impl TryFrom<RawObject> for OpenAck {
@@ -81,6 +84,12 @@ impl TryFrom<RawObject> for OpenAck {
         Ok(OpenAck {
             height: obj.height,
             connection_id: attribute!(obj, "connection_open_ack.connection_id"),
+            client_id: attribute!(obj, "connection_open_ack.client_id"),
+            counterparty_connection_id: attribute!(
+                obj,
+                "connection_open_ack.counterparty_connection_id"
+            ),
+            counterparty_client_id: attribute!(obj, "connection_open_ack.counterparty_client_id"),
         })
     }
 }
@@ -95,6 +104,9 @@ impl From<OpenAck> for IBCEvent {
 pub struct OpenConfirm {
     pub height: block::Height,
     pub connection_id: ConnectionId,
+    pub client_id: ClientId,
+    pub counterparty_connection_id: ConnectionId,
+    pub counterparty_client_id: ClientId,
 }
 
 impl TryFrom<RawObject> for OpenConfirm {
@@ -103,6 +115,15 @@ impl TryFrom<RawObject> for OpenConfirm {
         Ok(OpenConfirm {
             height: obj.height,
             connection_id: attribute!(obj, "connection_open_confirm.connection_id"),
+            client_id: attribute!(obj, "connection_open_confirm.client_id"),
+            counterparty_connection_id: attribute!(
+                obj,
+                "connection_open_confirm.counterparty_connection_id"
+            ),
+            counterparty_client_id: attribute!(
+                obj,
+                "connection_open_confirm.counterparty_client_id"
+            ),
         })
     }
 }

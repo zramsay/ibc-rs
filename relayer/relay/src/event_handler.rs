@@ -11,6 +11,7 @@ use ::tendermint::chain::Id as ChainId;
 use anomaly::BoxError;
 use tracing::{debug, info};
 
+#[derive(Debug, Clone)]
 pub enum RelayerEvent {
     ChainEvent(ChainEvent),
     QueryEvent(ChainQueryResponse),
@@ -107,9 +108,7 @@ impl EventHandler {
         match ev.event {
             BuilderEvent::NewBlock => self.new_block_handler(ev).await?,
             BuilderEvent::CreateClient | BuilderEvent::UpdateClient => self.client_handler(ev)?,
-            BuilderEvent::ConnectionOpenInit => self.handshake_event_handler(&ev).await?,
-
-            _ => {}
+            _ => self.handshake_event_handler(&ev).await?,
         }
         Ok(())
     }

@@ -20,6 +20,24 @@ impl ConnectionBuilderObject {
                 counterparty_connection_id: conn.counterparty_connection_id.clone(),
                 counterparty_client_id: conn.counterparty_client_id.clone(),
             }),
+            IBCEvent::OpenTryConnection(conn) => Ok(ConnectionBuilderObject {
+                connection_id: conn.connection_id.clone(),
+                client_id: conn.client_id.clone(),
+                counterparty_connection_id: conn.counterparty_connection_id.clone(),
+                counterparty_client_id: conn.counterparty_client_id.clone(),
+            }),
+            IBCEvent::OpenAckConnection(conn) => Ok(ConnectionBuilderObject {
+                connection_id: conn.connection_id.clone(),
+                client_id: conn.client_id.clone(),
+                counterparty_connection_id: conn.counterparty_connection_id.clone(),
+                counterparty_client_id: conn.counterparty_client_id.clone(),
+            }),
+            IBCEvent::OpenConfirmConnection(conn) => Ok(ConnectionBuilderObject {
+                connection_id: conn.connection_id.clone(),
+                client_id: conn.client_id.clone(),
+                counterparty_connection_id: conn.counterparty_connection_id.clone(),
+                counterparty_client_id: conn.counterparty_client_id.clone(),
+            }),
             _ => Err("not implemented".into()),
         }
     }

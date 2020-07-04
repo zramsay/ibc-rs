@@ -116,6 +116,30 @@ impl ChainEvent {
                     ConnectionBuilderObject::new(&event)?,
                 ),
             }),
+            IBCEvent::OpenTryConnection(conn) => Ok(ChainEvent {
+                trigger_chain,
+                chain_height: conn.height,
+                event: BuilderEvent::ConnectionOpenTry,
+                trigger_object: BuilderObject::ConnectionBuilderObject(
+                    ConnectionBuilderObject::new(&event)?,
+                ),
+            }),
+            IBCEvent::OpenAckConnection(conn) => Ok(ChainEvent {
+                trigger_chain,
+                chain_height: conn.height,
+                event: BuilderEvent::ConnectionOpenAck,
+                trigger_object: BuilderObject::ConnectionBuilderObject(
+                    ConnectionBuilderObject::new(&event)?,
+                ),
+            }),
+            IBCEvent::OpenConfirmConnection(conn) => Ok(ChainEvent {
+                trigger_chain,
+                chain_height: conn.height,
+                event: BuilderEvent::ConnectionOpenConfirm,
+                trigger_object: BuilderObject::ConnectionBuilderObject(
+                    ConnectionBuilderObject::new(&event)?,
+                ),
+            }),
 
             _ => Err("Unrecognized event".into()),
         }
@@ -132,6 +156,13 @@ pub(crate) fn requires_updated_b_client_on_a(event: BuilderEvent) -> bool {
 pub(crate) fn requires_consensus_proof_for_b_client_on_a(event: BuilderEvent) -> bool {
     match event {
         BuilderEvent::ConnectionOpenInit | BuilderEvent::ConnectionOpenTry => true,
+        _ => false,
+    }
+}
+
+pub(crate) fn handshake_terminus_event(event: BuilderEvent) -> bool {
+    match event {
+        BuilderEvent::ConnectionOpenConfirm | BuilderEvent::ChannelOpenConfirm => true,
         _ => false,
     }
 }

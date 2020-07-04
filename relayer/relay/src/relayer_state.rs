@@ -77,30 +77,23 @@ impl RelayerState {
 
         // check if a message builder already exists for the object,
         // return if the event is old or for a "lower" state.
-        // TODO - do the same check for flipped version
         let key = BuilderTrigger::from_event(ev.clone())?;
-        if self.keep_existing_message_builder(&key, ev) {
-            return Err("Received a past event, discard".into());
+        self.discard_event_if_higher_matching_mb(&key, ev)?;
+        //self.discard_event_if_higher_matching_flipped_mb(&key, ev)?;
+
+        if crate::chain_event::handshake_terminus_event(ev.event.clone()) {
+            return Ok(BuilderRequests::new());
         }
+
         // create new message builder, if we are here any old builder should have been removed
         // in the handling above.
+        let chains = self.chain_states.clone();
         let new_mb = self
             .message_builders
             .entry(key)
-            .or_insert_with(|| MessageBuilder::new(ev, dest_chain));
+            .or_insert_with(|| MessageBuilder::new(ev, dest_chain, chains));
 
-        let src_chain = self
-            .chain_states
-            .get(&ev.trigger_chain)
-            .ok_or("unknown chain")?;
-        let dest_chain = self.chain_states.get(&dest_chain).ok_or("unknown chain")?;
-
-        let requests = new_mb.message_builder_handler(
-            RelayerEvent::ChainEvent(ev.clone()),
-            src_chain,
-            dest_chain,
-        );
-        requests
+        new_mb.message_builder_handler(&RelayerEvent::ChainEvent(ev.clone()))
     }
 
     pub fn new_block_update(&mut self, ev: ChainEvent) -> Result<BuilderRequests, BoxError> {
@@ -123,22 +116,10 @@ impl RelayerState {
                 let src_chain_id = mb.event.trigger_chain;
                 let dest_chain_id = mb.dest_chain;
                 if ev.trigger_chain == src_chain_id || ev.trigger_chain == dest_chain_id {
-                    let (src_chain, dest_chain) = (
-                        self.chain_states
-                            .get(&src_chain_id)
-                            .ok_or("unknown chain")?,
-                        self.chain_states
-                            .get(&dest_chain_id)
-                            .ok_or("unknown chain")?,
-                    );
-
-                    match mb.message_builder_handler(
-                        RelayerEvent::ChainEvent(ev.clone()),
-                        src_chain,
-                        dest_chain,
-                    ) {
-                        Ok(mut requests) => merged_requests.merge(&mut requests),
-                        Err(_) => {},
+                    if let Ok(mut requests) =
+                        mb.message_builder_handler(&RelayerEvent::ChainEvent(ev.clone()))
+                    {
+                        merged_requests.merge(&mut requests)
                     }
                 }
             }
@@ -154,24 +135,12 @@ impl RelayerState {
         let mut merged_requests = BuilderRequests::new();
 
         for (_, mb) in self.message_builders.iter_mut() {
-            let src_chain_id = mb.event.trigger_chain;
-            let dest_chain_id = mb.dest_chain;
             if valid_query_response(&response, &mb.src_queries)
                 || valid_query_response(&response, &mb.dest_queries)
             {
-                let (src_chain, dest_chain) = (
-                    self.chain_states
-                        .get(&src_chain_id)
-                        .ok_or("unknown chain")?,
-                    self.chain_states
-                        .get(&dest_chain_id)
-                        .ok_or("unknown chain")?,
-                );
-                if let Ok(mut requests) = mb.message_builder_handler(
-                    RelayerEvent::QueryEvent(response.clone()),
-                    src_chain,
-                    dest_chain,
-                ) {
+                if let Ok(mut requests) =
+                    mb.message_builder_handler(&RelayerEvent::QueryEvent(response.clone()))
+                {
                     merged_requests.merge(&mut requests)
                 }
             }
@@ -223,18 +192,54 @@ impl RelayerState {
         self.message_builders.remove(key)
     }
 
-    fn keep_existing_message_builder(&mut self, key: &BuilderTrigger, ev: &ChainEvent) -> bool {
+    fn discard_for_higher_matching_mb(
+        &mut self,
+        key: &BuilderTrigger,
+        ev: &ChainEvent,
+    ) -> Result<(), BoxError> {
+        debug!(
+            "checking if mb: {:?} \nshould be removed due to\n {:?}",
+            key, ev
+        );
+
         if let Some(existing_mb) = self.get_message_builder(key) {
+            // a message builder exists for the new event
             if existing_mb.event.event >= ev.event
                 || existing_mb.event.chain_height > ev.chain_height
             {
-                return true;
+                debug!("don't remove mb");
+                return Err("message builder in higher state exists".into());
             }
             // A new event with the object in a "higher" state is received
             // Cancel old message builder by removing it from the state.
             // Any pending request responses will be discarded
+            debug!("removing mb");
             self.remove_message_builder(&key);
+
+            debug!("\n\nSTATE DUMP {:?}\n\n", self.message_builders);
         }
-        false
+        Ok(())
+    }
+
+    fn discard_event_if_higher_matching_mb(
+        &mut self,
+        key: &BuilderTrigger,
+        ev: &ChainEvent,
+    ) -> Result<(), BoxError> {
+        self.discard_for_higher_matching_mb(&key, ev)?;
+
+        // flip the key if possible
+        // TODO - figure out client_id() for channel and packet
+        let dest_chain = self.chain_from_client(ev.trigger_object.clone().client_id()?)?;
+        match ev.trigger_object.flipped() {
+            Ok(obj) => {
+                let flipped_key = BuilderTrigger {
+                    chain: dest_chain,
+                    obj,
+                };
+                self.discard_for_higher_matching_mb(&flipped_key, ev)
+            }
+            Err(_) => Ok(()),
+        }
     }
 }

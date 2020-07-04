@@ -72,8 +72,7 @@ impl LightClientQueryHandler {
         info!("running Light Client Handler Loop");
 
         loop {
-            let query = self.light_client_request_rx.recv().await;
-            info!("Light Client Querier received {:?}", query);
+            let _query = self.light_client_request_rx.recv().await;
         }
     }
 }
