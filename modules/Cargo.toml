@@ -28,6 +28,7 @@ serde_json = "1"
 tracing = "0.1.13"
 prost = "0.6.1"
 bytes = "0.5.5"
+protobuf = { version = "2", features = ["with-bytes"] }
 
 [dev-dependencies]
 tokio = { version = "0.2", features = ["macros"] }
@@ -35,3 +36,4 @@ subtle-encoding = { version = "0.5" }
 
 [build-dependencies]
 prost-build = { version = "0.6.1" }
+protoc-rust = "2.0"
