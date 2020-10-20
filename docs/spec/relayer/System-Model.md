@@ -74,14 +74,65 @@ two packets *p1* and *p2* such that *p1* is received before *p2*, then the modul
 corresponding acknowledgments in the same order, i.e., first the acknowledgment that is result of the reception of the
 packet *p1* and then the acknowledgment from the *p2*.   
 
- 
+## Distributed system model 
+
+In the rest of this document we consider an implementation of the IBC protocol in a setup where modules are 
+deployed on different blockchains (distributed ledgers) and packets transmission between modules is responsibility 
+of special off-chain processed called relayers. 
+
+We now discuss how various channel requirements are implemented in this setup and formalise assumptions under 
+which channel requirements can be met.
+
+### Naming
+
+Each channel is uniquely identified with its end points, i.e., modules that sits at each end of the channel. 
+Therefore, we need a possibility to uniquely identify modules. As a module belongs to a chain, we can uniquely 
+identify a module by a pair (chainID, moduleID), if we assume that every chain is uniquely identified and that
+every module has a unique id within the chain it executes in.
+
+As there is no global chain id registry, anyone is able to create a chain by reusing the existing chain id. 
+Therefore, to be able to uniquely identify the chain, we need to refer in addition to a chain id also to a
+validator set, i.e., set of validator processes uniquely identified with its public key that are securing and 
+operating given chain. 
+
+**[Validator Uniqueness]**: We assume that every validator is uniquely identified with its public key.
+
+**[Chain Uniqueness]**: We assume that each chain is uniquely identified with a pair *(chainID, validatorSet),
+where the *validatorSet* is a set of validator identifiers. Furthermore, we assume that an honest validator
+participates only in a single chain with a given *chainID*. 
+
+Note that most of the blockchain systems assume dynamic validator sets, therefore, a chain identifier is
+not simply defined with a chainID and the initial validator set, but more as a sequence of validator sets
+where validator set changes is defined by the security model of the given chain. To make things even more
+complex, chain ids are also not static, i.e., it normally changes after chain hard forks to include the 
+chain version (normally number of executed hard forks).     
+
+Let's assume for the rest of this section that there is a abstract term called *ChainID* that allows us to uniquely
+identify each chain, where we assume a set of definitions and rules that ensures that a given chain is uniquely
+identified with its abstract representation called *ChainID*.  
+
+If two modules should be allowed to establish only a single channel between them then using (ChainID, moduleID)
+would be sufficient to uniquely identify the channel. However, as we need to allow modules opening as many channels
+as they want between them, we need something more. IBC introduces the portID as a way to support modules having as many
+channels as they want. The requirement is having unique mapping between a module and a portID, i.e., only a portID is 
+owned only by a single module. Therefore, module or channel end is uniquely identified with a pair (ChainID, portID).
+
+**[Port Uniqueness]**: We assume that portIDs are unique (in the chain scope) and that every port is owned by at most 
+single module. 
+
+Note that this requirement implies some access control mechanism that would allow only port owner to send/receive a 
+message addressed to that port. 
+
+**[Port Access]**: For every *portID* only owner of that port id is allowed to receive/send messages addressed to that
+port.
+
+Note that port access mechanisms are not externally verifiable, so issue with implementation in this logic 
+could lead to authentication violations, i.e., module being impersonated by another module of the same chain. 
+
+
+       
       
 ## Full node
-
-
-
-
-
 
 Relayers are processes that provide connection layer of the IBC protocol. In the IBC protocol, on chain
 modules do not have a way of directly sending a message to each other; this is the responsibility of relayer
