@@ -3,7 +3,7 @@ use thiserror::Error;
 
 pub type Error = anomaly::Error<Kind>;
 
-use crate::ics24_host::identifier::ConnectionId;
+use crate::ics24_host::identifier::{ChannelId, ConnectionId};
 
 #[derive(Clone, Debug, Error)]
 pub enum Kind {
@@ -58,8 +58,19 @@ pub enum Kind {
     #[error("the port has no capability associated")]
     NoPortCapability,
 
+    #[error("queried for a non-existing connection")]
+    ChannelNotFound,
+
     #[error("the module associated with the port does not have the capability it needs")]
     InvalidPortCapability,
+
+    #[error("the associated connection {0} is not OPEN ")]
+    ConnectionNotOpen(ConnectionId),
+
+    #[error(
+        "a different channel exists (was initialized) already for the same channel identifier {0}"
+    )]
+    ChannelMismatch(ChannelId),
 }
 
 impl Kind {

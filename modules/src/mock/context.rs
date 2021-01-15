@@ -247,6 +247,48 @@ impl MockContext {
         }
     }
 
+    pub fn with_connection_capability_init(
+        self,
+        port_id: PortId,
+        connection_id: ConnectionId,
+        connection_end: ConnectionEnd,
+        chan_id: ChannelId,
+        channel_end: ChannelEnd,
+    ) -> Self {
+        let mut connections = self.connections.clone();
+        connections.insert(connection_id, connection_end);
+        let mut port_capabilities = self.port_capabilities.clone();
+        port_capabilities.insert(port_id.clone(), Capability::new());
+
+        let mut channels = self.channels.clone();
+
+        channels.insert((port_id, chan_id), channel_end);
+        Self {
+            connections,
+            port_capabilities,
+            channels,
+            ..self
+        }
+    }
+
+    pub fn with_connection_capability(
+        self,
+        port_id: PortId,
+        connection_id: ConnectionId,
+        connection_end: ConnectionEnd,
+    ) -> Self {
+        let mut connections = self.connections.clone();
+        connections.insert(connection_id, connection_end);
+        let mut port_capabilities = self.port_capabilities.clone();
+        port_capabilities.insert(port_id, Capability::new());
+        Self {
+            connections,
+            port_capabilities,
+            ..self
+        }
+    }
+
+
     /// Accessor for a block of the local (host) chain from this context.
     /// Returns `None` if the block at the requested height does not exist.
     fn host_block(&self, target_height: Height) -> Option<&HostBlock> {

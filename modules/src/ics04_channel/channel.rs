@@ -149,6 +149,22 @@ impl ChannelEnd {
     pub fn state_matches(&self, other: &State) -> bool {
         self.state.eq(other)
     }
+    /// Helper function to compare the order of this end with another order.
+    pub fn order_matches(&self, other: &Order) -> bool {
+        self.ordering.eq(other)
+    }
+
+    pub fn connection_hops_matches(&self, other: &[ConnectionId]) -> bool {
+        self.connection_hops==other
+    }
+
+    pub fn counterparty_matches(&self, other: &Counterparty) -> bool {
+        self.counterparty().eq(other)
+    }
+
+    pub fn version_matches(&self, other: &str) -> bool {
+        self.version().eq(other)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
