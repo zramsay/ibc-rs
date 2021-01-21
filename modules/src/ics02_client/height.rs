@@ -46,6 +46,7 @@ impl Height {
     }
 
     pub fn sub(&self, delta: u64) -> Result<Height, Error> {
+        // TODO Why does the `Self::zero()` exists if the height can't be zero?
         if self.revision_height <= delta {
             return Err(Kind::InvalidHeightResult
                 .context("height cannot end up zero or negative")
@@ -84,16 +85,10 @@ impl PartialOrd for Height {
 
 impl Ord for Height {
     fn cmp(&self, other: &Self) -> Ordering {
-        if self.revision_number < other.revision_number {
-            Ordering::Less
-        } else if self.revision_number > other.revision_number {
-            Ordering::Greater
-        } else if self.revision_height < other.revision_height {
-            Ordering::Less
-        } else if self.revision_height > other.revision_height {
-            Ordering::Greater
+        if self.revision_number == other.revision_number {
+            self.revision_height.cmp(&other.revision_height)
         } else {
-            Ordering::Equal
+            self.revision_number.cmp(&other.revision_number)
         }
     }
 }

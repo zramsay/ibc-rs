@@ -38,6 +38,9 @@ pub trait ClientKeeper {
                     res.client_state.latest_height(),
                     res.consensus_state,
                 )?;
+                // TODO: should the `ClientResult` only have the client counter read and not the full id?
+                // With that, and if the next function returns the client counter before the increment occurs,
+                // we could assert that atomicity was preserved
                 self.increase_client_counter();
                 Ok(vec![ClientEvent::ClientCreated(client_id)])
             }

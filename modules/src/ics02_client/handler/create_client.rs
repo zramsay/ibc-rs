@@ -36,8 +36,8 @@ pub fn process(
     Ok(output.with_result(ClientResult::Create(Result {
         client_id,
         client_type: msg.client_state().client_type(),
-        client_state: msg.client_state(),
-        consensus_state: msg.consensus_state(),
+        client_state: msg.client_state().clone(),
+        consensus_state: msg.consensus_state().clone(),
     })))
 }
 
@@ -94,8 +94,8 @@ mod tests {
                     let expected_client_id = ClientId::new(ClientType::Mock, 0).unwrap();
                     assert_eq!(create_result.client_id, expected_client_id);
 
-                    assert_eq!(create_result.client_state, msg.client_state());
-                    assert_eq!(create_result.consensus_state, msg.consensus_state());
+                    assert_eq!(&create_result.client_state, msg.client_state());
+                    assert_eq!(&create_result.consensus_state, msg.consensus_state());
                 }
                 _ => {
                     panic!("unexpected result type: expected ClientResult::CreateResult!");
@@ -111,60 +111,27 @@ mod tests {
     fn test_create_client_ok_multiple() {
         let existing_client_id = ClientId::default();
         let signer = get_dummy_account_id();
-        let height = Height::new(0, 80);
+        let height = |revision_height| Height::new(0, revision_height);
+        let msg_create_any_client = |revision_height| {
+            MsgCreateAnyClient::new(
+                MockClientState(MockHeader(height(revision_height))).into(),
+                MockConsensusState(MockHeader(height(revision_height))).into(),
+                signer,
+            )
+            .unwrap()
+        };
 
-        let ctx = MockContext::default().with_client(&existing_client_id, height);
+        let ctx = MockContext::default().with_client(&existing_client_id, height(80));
 
         let create_client_msgs: Vec<MsgCreateAnyClient> = vec![
-            MsgCreateAnyClient::new(
-                MockClientState(MockHeader(Height {
-                    revision_height: 42,
-                    ..height
-                }))
-                .into(),
-                MockConsensusState(MockHeader(Height {
-                    revision_height: 42,
-                    ..height
-                }))
-                .into(),
-                signer,
-            )
-            .unwrap(),
-            MsgCreateAnyClient::new(
-                MockClientState(MockHeader(Height {
-                    revision_height: 42,
-                    ..height
-                }))
-                .into(),
-                MockConsensusState(MockHeader(Height {
-                    revision_height: 42,
-                    ..height
-                }))
-                .into(),
-                signer,
-            )
-            .unwrap(),
-            MsgCreateAnyClient::new(
-                MockClientState(MockHeader(Height {
-                    revision_height: 50,
-                    ..height
-                }))
-                .into(),
-                MockConsensusState(MockHeader(Height {
-                    revision_height: 50,
-                    ..height
-                }))
-                .into(),
-                signer,
-            )
-            .unwrap(),
-        ]
-        .into_iter()
-        .collect();
+            msg_create_any_client(42),
+            msg_create_any_client(42),
+            msg_create_any_client(50),
+        ];
 
         // The expected client id that will be generated will be identical to "9999-mock-0" for all
         // tests. This is because we're not persisting any client results (which is done via the
-        // tests for `ics26_routing::dispatch`.
+        // tests for `ics26_routing::dispatch`).
         let expected_client_id = ClientId::new(ClientType::Mock, 0).unwrap();
 
         for msg in create_client_msgs {
@@ -185,8 +152,8 @@ mod tests {
 
                         assert_eq!(create_res.client_id, expected_client_id);
 
-                        assert_eq!(create_res.client_state, msg.client_state());
-                        assert_eq!(create_res.consensus_state, msg.consensus_state());
+                        assert_eq!(&create_res.client_state, msg.client_state());
+                        assert_eq!(&create_res.consensus_state, msg.consensus_state());
                     }
                     _ => {
                         panic!("expected result of type ClientResult::CreateResult");
@@ -200,7 +167,7 @@ mod tests {
     }
 
     #[test]
-    fn test_tm_create_client_ok() {
+    fn test_tendermint_create_client_ok() {
         let signer = get_dummy_account_id();
 
         let ctx = MockContext::default();
@@ -247,8 +214,8 @@ mod tests {
                     let expected_client_id = ClientId::new(ClientType::Tendermint, 0).unwrap();
                     assert_eq!(create_res.client_id, expected_client_id);
 
-                    assert_eq!(create_res.client_state, msg.client_state());
-                    assert_eq!(create_res.consensus_state, msg.consensus_state());
+                    assert_eq!(&create_res.client_state, msg.client_state());
+                    assert_eq!(&create_res.consensus_state, msg.consensus_state());
                 }
                 _ => {
                     panic!("expected result of type ClientResult::CreateResult");
