@@ -1,0 +1,133 @@
+[global]
+timeout = '10s'
+strategy = 'naive'
+log_level = 'error'
+
+[[chains]]
+id = 'ibc-0'
+rpc_addr = 'tcp://localhost:20600'
+grpc_addr = 'tcp://localhost:9090'
+account_prefix = 'cosmos'
+key_name = 'testkey'
+store_prefix = 'ibc'
+gas = 3000000
+clock_drift = '5s'
+trusting_period = '14days'
+
+[chains.trust_threshold]
+numerator = '1'
+denominator = '3'
+
+[chains.peers]
+primary = 'FC03C5254202954C281BBA4F47AFCA2B844D64E5'
+
+[[chains.peers.light_clients]]
+peer_id = 'FC03C5254202954C281BBA4F47AFCA2B844D64E5'
+address = 'tcp://localhost:20600'
+timeout = '10s'
+trusted_header_hash = 'CC90CBE006BD8563B9C4F587821C370E268B16762FB1811AA015E0FB2709476F'
+trusted_height = '1312'
+
+[chains.peers.light_clients.store]
+type = 'disk'
+path = '/Users/informal/ibc-rs/data/ibc-0/data/FC03C5254202954C281BBA4F47AFCA2B844D64E5'
+
+[[chains.peers.light_clients]]
+peer_id = '2427F8D914A6862279B3326FA64F76E3BC06DB2E'
+address = 'tcp://localhost:20600'
+timeout = '10s'
+trusted_header_hash = '43DF865FCAC5874B4BB7AA3AB21A0BD0125651DD98F655DA09A3BC3C7342FAE7'
+trusted_height = '1314'
+
+[chains.peers.light_clients.store]
+type = 'disk'
+path = '/Users/informal/ibc-rs/data/ibc-0/data/2427F8D914A6862279B3326FA64F76E3BC06DB2E'
+
+[[chains]]
+id = 'ibc-1'
+rpc_addr = 'tcp://localhost:20601'
+grpc_addr = 'tcp://localhost:9091'
+account_prefix = 'cosmos'
+key_name = 'testkey'
+store_prefix = 'ibc'
+gas = 3000000
+clock_drift = '5s'
+trusting_period = '14days'
+
+[chains.trust_threshold]
+numerator = '1'
+denominator = '3'
+
+[chains.peers]
+primary = 'D5BBC363E95346F9FE39515F2CD7B96F5E46F5B5'
+
+[[chains.peers.light_clients]]
+peer_id = 'D5BBC363E95346F9FE39515F2CD7B96F5E46F5B5'
+address = 'tcp://localhost:20601'
+timeout = '10s'
+trusted_header_hash = '85F6569B3AD3DE41B9FF079E8B34520F62A128F835CBFC6C50E595B9173B4475'
+trusted_height = '1303'
+
+[chains.peers.light_clients.store]
+type = 'disk'
+path = '/Users/informal/ibc-rs/data/ibc-1/data/D5BBC363E95346F9FE39515F2CD7B96F5E46F5B5'
+
+[[chains.peers.light_clients]]
+peer_id = 'A885BB3D3DFF6101188B462466AE926E7A6CD51E'
+address = 'tcp://localhost:20601'
+timeout = '10s'
+trusted_header_hash = '07A63ED91E46E061870A383FBA7F870B5B2BC799F056E69BAC5136F6AF9F2EDC'
+trusted_height = '1305'
+
+[chains.peers.light_clients.store]
+type = 'disk'
+path = '/Users/informal/ibc-rs/data/ibc-1/data/A885BB3D3DFF6101188B462466AE926E7A6CD51E'
+
+[[chains]]
+id = 'ibc-2'
+rpc_addr = 'tcp://localhost:20602'
+grpc_addr = 'tcp://localhost:9092'
+account_prefix = 'cosmos'
+key_name = 'testkey'
+store_prefix = 'ibc'
+gas = 3000000
+clock_drift = '5s'
+trusting_period = '14days'
+
+[chains.trust_threshold]
+numerator = '1'
+denominator = '3'
+
+[chains.peers]
+primary = '4B90A14123D871E5993FD04E23D35A8957E8879F'
+
+[[chains.peers.light_clients]]
+peer_id = '4B90A14123D871E5993FD04E23D35A8957E8879F'
+address = 'tcp://localhost:20602'
+timeout = '10s'
+trusted_header_hash = 'FFD3A3929D75FD104F3CA4E614E337A5CEB3645713B373BC10D8533664EFBE80'
+trusted_height = '1293'
+
+[chains.peers.light_clients.store]
+type = 'disk'
+path = '/Users/informal/ibc-rs/data/ibc-2/data/4B90A14123D871E5993FD04E23D35A8957E8879F'
+
+[[chains.peers.light_clients]]
+peer_id = 'A885BB3D3DFF6101188B462466AE926E7A6CD51E'
+address = 'tcp://localhost:20602'
+timeout = '10s'
+trusted_header_hash = '95B92FE5B6C0AB66A3B368D38EA2D01B1A075DC4B7FBD3D6FED9D404C02E4B36'
+trusted_height = '1295'
+
+[chains.peers.light_clients.store]
+type = 'disk'
+path = '/Users/informal/ibc-rs/data/ibc-2/data/A885BB3D3DFF6101188B462466AE926E7A6CD51E'
+
+[[connections]]
+a_chain = 'ibc-0'
+b_chain = 'ibc-1'
+
+[[connections.paths]]
+a_port = 'transfer'
+b_port = 'transfer'
+
