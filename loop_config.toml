@@ -19,29 +19,29 @@ numerator = '1'
 denominator = '3'
 
 [chains.peers]
-primary = 'FC03C5254202954C281BBA4F47AFCA2B844D64E5'
+primary = '0BE700CDB53EC956B4335A18A0AA1C782C051AD5'
 
 [[chains.peers.light_clients]]
-peer_id = 'FC03C5254202954C281BBA4F47AFCA2B844D64E5'
+peer_id = '0BE700CDB53EC956B4335A18A0AA1C782C051AD5'
 address = 'tcp://localhost:20600'
 timeout = '10s'
-trusted_header_hash = 'CC90CBE006BD8563B9C4F587821C370E268B16762FB1811AA015E0FB2709476F'
-trusted_height = '1312'
+trusted_header_hash = 'C6C4AA7DD397971C9045566FCA6694088548691E570318DD180288E502358CE5'
+trusted_height = '24'
 
 [chains.peers.light_clients.store]
 type = 'disk'
-path = '/Users/informal/ibc-rs/data/ibc-0/data/FC03C5254202954C281BBA4F47AFCA2B844D64E5'
+path = '/home/vitor.enes/ibc-rs/data/ibc-0/data/0BE700CDB53EC956B4335A18A0AA1C782C051AD5'
 
 [[chains.peers.light_clients]]
 peer_id = '2427F8D914A6862279B3326FA64F76E3BC06DB2E'
 address = 'tcp://localhost:20600'
 timeout = '10s'
-trusted_header_hash = '43DF865FCAC5874B4BB7AA3AB21A0BD0125651DD98F655DA09A3BC3C7342FAE7'
-trusted_height = '1314'
+trusted_header_hash = 'ED3ED25B3AFD8D9B3210AA291C7C7533DDF883044CFDFFE74BD52D595B7E20E0'
+trusted_height = '25'
 
 [chains.peers.light_clients.store]
 type = 'disk'
-path = '/Users/informal/ibc-rs/data/ibc-0/data/2427F8D914A6862279B3326FA64F76E3BC06DB2E'
+path = '/home/vitor.enes/ibc-rs/data/ibc-0/data/2427F8D914A6862279B3326FA64F76E3BC06DB2E'
 
 [[chains]]
 id = 'ibc-1'
@@ -59,29 +59,29 @@ numerator = '1'
 denominator = '3'
 
 [chains.peers]
-primary = 'D5BBC363E95346F9FE39515F2CD7B96F5E46F5B5'
+primary = 'E4C5162C770DB645ABC3B2DC755352AE2188144D'
 
 [[chains.peers.light_clients]]
-peer_id = 'D5BBC363E95346F9FE39515F2CD7B96F5E46F5B5'
+peer_id = 'E4C5162C770DB645ABC3B2DC755352AE2188144D'
 address = 'tcp://localhost:20601'
 timeout = '10s'
-trusted_header_hash = '85F6569B3AD3DE41B9FF079E8B34520F62A128F835CBFC6C50E595B9173B4475'
-trusted_height = '1303'
+trusted_header_hash = '1157F65101794117DA583EA8EA67C49F338C30333893A3B63E65AC5A3C54C716'
+trusted_height = '14'
 
 [chains.peers.light_clients.store]
 type = 'disk'
-path = '/Users/informal/ibc-rs/data/ibc-1/data/D5BBC363E95346F9FE39515F2CD7B96F5E46F5B5'
+path = '/home/vitor.enes/ibc-rs/data/ibc-1/data/E4C5162C770DB645ABC3B2DC755352AE2188144D'
 
 [[chains.peers.light_clients]]
 peer_id = 'A885BB3D3DFF6101188B462466AE926E7A6CD51E'
 address = 'tcp://localhost:20601'
 timeout = '10s'
-trusted_header_hash = '07A63ED91E46E061870A383FBA7F870B5B2BC799F056E69BAC5136F6AF9F2EDC'
-trusted_height = '1305'
+trusted_header_hash = '1157F65101794117DA583EA8EA67C49F338C30333893A3B63E65AC5A3C54C716'
+trusted_height = '14'
 
 [chains.peers.light_clients.store]
 type = 'disk'
-path = '/Users/informal/ibc-rs/data/ibc-1/data/A885BB3D3DFF6101188B462466AE926E7A6CD51E'
+path = '/home/vitor.enes/ibc-rs/data/ibc-1/data/A885BB3D3DFF6101188B462466AE926E7A6CD51E'
 
 [[chains]]
 id = 'ibc-2'
@@ -99,29 +99,29 @@ numerator = '1'
 denominator = '3'
 
 [chains.peers]
-primary = '4B90A14123D871E5993FD04E23D35A8957E8879F'
+primary = '24E2D46166C823366A7D00480FECCF693CFFBB6B'
 
 [[chains.peers.light_clients]]
-peer_id = '4B90A14123D871E5993FD04E23D35A8957E8879F'
+peer_id = '24E2D46166C823366A7D00480FECCF693CFFBB6B'
 address = 'tcp://localhost:20602'
 timeout = '10s'
-trusted_header_hash = 'FFD3A3929D75FD104F3CA4E614E337A5CEB3645713B373BC10D8533664EFBE80'
-trusted_height = '1293'
+trusted_header_hash = 'B6FB0323997C647EEDD0902B524F343C3D4AB18FD281C8FF4D1A48701CBFAD26'
+trusted_height = '4'
 
 [chains.peers.light_clients.store]
 type = 'disk'
-path = '/Users/informal/ibc-rs/data/ibc-2/data/4B90A14123D871E5993FD04E23D35A8957E8879F'
+path = '/home/vitor.enes/ibc-rs/data/ibc-2/data/24E2D46166C823366A7D00480FECCF693CFFBB6B'
 
 [[chains.peers.light_clients]]
 peer_id = 'A885BB3D3DFF6101188B462466AE926E7A6CD51E'
 address = 'tcp://localhost:20602'
 timeout = '10s'
-trusted_header_hash = '95B92FE5B6C0AB66A3B368D38EA2D01B1A075DC4B7FBD3D6FED9D404C02E4B36'
-trusted_height = '1295'
+trusted_header_hash = 'B6FB0323997C647EEDD0902B524F343C3D4AB18FD281C8FF4D1A48701CBFAD26'
+trusted_height = '4'
 
 [chains.peers.light_clients.store]
 type = 'disk'
-path = '/Users/informal/ibc-rs/data/ibc-2/data/A885BB3D3DFF6101188B462466AE926E7A6CD51E'
+path = '/home/vitor.enes/ibc-rs/data/ibc-2/data/A885BB3D3DFF6101188B462466AE926E7A6CD51E'
 
 [[connections]]
 a_chain = 'ibc-0'
