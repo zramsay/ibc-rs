@@ -89,7 +89,7 @@ pub fn pick_version(
     if intersection.is_empty() {
         return None;
     }
-    Some(intersection.pop().unwrap())
+    Some(intersection.into_iter().next().unwrap())
 }
 
 #[cfg(test)]
