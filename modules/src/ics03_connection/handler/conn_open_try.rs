@@ -65,7 +65,7 @@ pub(crate) fn process(
 
     // Proof verification in two steps:
     // 1. Setup: build the ConnectionEnd as we expect to find it on the other party.
-    let expected_conn = ConnectionEnd::new(
+    let expected_connection_end = ConnectionEnd::new(
         State::Init,
         counterparty.client_id().clone(),
         Counterparty::new(client_id, None, ctx.commitment_prefix()),
@@ -74,7 +74,13 @@ pub(crate) fn process(
     );
 
     // 2. Pass the details to the verification function.
-    verify_proofs(ctx, &client_state, &connection_end, &expected_conn, &proofs)?;
+    verify_proofs(
+        ctx,
+        &client_state,
+        &connection_end,
+        &expected_connection_end,
+        &proofs,
+    )?;
 
     // Transition the connection end to the new state & pick a version.
     connection_end.set_state(State::TryOpen);

@@ -374,9 +374,11 @@ impl ChannelReader for MockContext {
             Some(channel_end) => {
                 let connection_id = &channel_end.connection_hops().clone()[0];
                 match ChannelReader::connection_end(self, connection_id) {
-                    Some(connection_end) => {
-                        ConnectionReader::client_consensus_state(self, connection_end.client_id(), height)
-                    }
+                    Some(connection_end) => ConnectionReader::client_consensus_state(
+                        self,
+                        connection_end.client_id(),
+                        height,
+                    ),
                     _ => None,
                 }
             }
