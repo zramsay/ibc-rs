@@ -25,9 +25,9 @@ pub(crate) fn process(
         Some(old_conn_end) => {
             // Check if the connection state is either Init or TryOpen and message version
             // is compatible.
-            let state_is_consistent = old_conn_end.state_matches(&State::Init)
+            let state_is_consistent = old_conn_end.state_matches(State::Init)
                 && old_conn_end.versions().contains(msg.version())
-                || old_conn_end.state_matches(&State::TryOpen)
+                || old_conn_end.state_matches(State::TryOpen)
                     && old_conn_end.versions().get(0).eq(&Some(msg.version()));
 
             // Check that if the msg's counterparty connection id is not empty then it matches

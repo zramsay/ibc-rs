@@ -351,13 +351,13 @@ impl ChannelReader for MockContext {
         &self,
         port_channel_id: &(PortId, ChannelId),
     ) -> Option<AnyClientState> {
-        let channel = self.channel_end(port_channel_id);
-        match channel {
-            Some(v) => {
-                let cid = v.connection_hops().clone()[0].clone();
-                let conn = ChannelReader::connection_end(self, &cid);
-                match conn {
-                    Some(v) => ConnectionReader::client_state(self, &v.client_id().clone()),
+        match self.channel_end(port_channel_id) {
+            Some(channel_end) => {
+                let connection_id = &channel_end.connection_hops().clone()[0];
+                match ChannelReader::connection_end(self, connection_id) {
+                    Some(connection_end) => {
+                        ConnectionReader::client_state(self, connection_end.client_id())
+                    }
                     _ => None,
                 }
             }
@@ -370,12 +370,15 @@ impl ChannelReader for MockContext {
         port_channel_id: &(PortId, ChannelId),
         height: Height,
     ) -> Option<AnyConsensusState> {
-        let channel_end = self.channel_end(port_channel_id);
-        match channel_end {
-            Some(channel) => {
-                let cid = channel.connection_hops()[0].clone();
-                let conn = ChannelReader::connection_end(self, &cid).unwrap();
-                ConnectionReader::client_consensus_state(self, conn.client_id(), height)
+        match self.channel_end(port_channel_id) {
+            Some(channel_end) => {
+                let connection_id = &channel_end.connection_hops().clone()[0];
+                match ChannelReader::connection_end(self, connection_id) {
+                    Some(connection_end) => {
+                        ConnectionReader::client_consensus_state(self, connection_end.client_id(), height)
+                    }
+                    _ => None,
+                }
             }
             _ => None,
         }

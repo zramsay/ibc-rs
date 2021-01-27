@@ -20,7 +20,7 @@ pub(crate) fn process(
     let mut new_conn_end = match ctx.connection_end(msg.connection_id()) {
         // A connection end must exist and must be in TryOpen state; otherwise return error.
         Some(old_conn_end) => {
-            if !(old_conn_end.state_matches(&State::TryOpen)) {
+            if !(old_conn_end.state_matches(State::TryOpen)) {
                 // Old connection end is in incorrect state, propagate the error.
                 Err(Into::<Error>::into(Kind::ConnectionMismatch(
                     msg.connection_id().clone(),

@@ -1,15 +1,12 @@
 //! Protocol logic specific to ICS4 messages of type `MsgChannelOpenTry`.
 
-use Kind::ConnectionNotOpen;
-
 use crate::events::IBCEvent;
 use crate::handler::{HandlerOutput, HandlerResult};
-use crate::ics03_connection::connection::State as ConnectionState;
 use crate::ics04_channel::channel::{ChannelEnd, Counterparty, State};
 use crate::ics04_channel::context::ChannelReader;
 use crate::ics04_channel::error::{Error, Kind};
 use crate::ics04_channel::events::Attributes;
-use crate::ics04_channel::handler::verify::verify_proofs;
+use crate::ics04_channel::handler::verify;
 use crate::ics04_channel::handler::ChannelResult;
 use crate::ics04_channel::msgs::chan_open_try::MsgChannelOpenTry;
 
@@ -19,14 +16,19 @@ pub(crate) fn process(
 ) -> HandlerResult<ChannelResult, Error> {
     let mut output = HandlerOutput::builder();
 
-    // Unwrap the old channel end (if any) and validate it against the message.
+    let port_id = msg.port_id().clone();
+    let channel_id = msg.previous_channel_id().clone();
+    let (connection_id, connection_end, channel_cap) =
+        verify::verify_connection_and_capability(ctx, msg.channel(), &port_id)?;
 
-    let mut new_channel_end = match msg.previous_channel_id() {
-        Some(prev_channel_id) => {
-            let port_channel_id = (msg.port_id().clone(), prev_channel_id.clone());
+    // Unwrap the old channel end (if any) and validate it against the message.
+    // TODO: can we create the channel end just once? the `old_channel_end` should be used just for verification
+    let mut channel_end = match channel_id.as_ref() {
+        Some(channel_id) => {
+            let port_channel_id = (port_id.clone(), channel_id.clone());
             let old_channel_end = ctx
                 .channel_end(&port_channel_id)
-                .ok_or_else(|| Kind::ChannelNotFound.context(prev_channel_id.to_string()))?;
+                .ok_or_else(|| Kind::ChannelNotFound.context(channel_id.to_string()))?;
 
             // Validate that existing channel end matches with the one we're trying to establish.
 
@@ -41,16 +43,16 @@ pub(crate) fn process(
                 old_channel_end
             } else {
                 // A ConnectionEnd already exists and validation failed.
-                return Err(Into::<Error>::into(
-                    Kind::ChannelMismatch(prev_channel_id.clone()).context(
+                return Err(Kind::ChannelMismatch(channel_id.clone())
+                    .context(
                         old_channel_end
                             .counterparty()
                             .channel_id()
                             .clone()
                             .unwrap()
                             .to_string(),
-                    ),
-                ));
+                    )
+                    .into());
             }
         }
         // No channel id is supplied to  create a new channel end. Note: the id is assigned
@@ -63,49 +65,6 @@ pub(crate) fn process(
             msg.counterparty_version().clone(),
         ),
     };
-
-    // An IBC connection running on the local (host) chain should exist.
-
-    if msg.channel.connection_hops().len() != 1 {
-        return Err(Kind::InvalidConnectionHopsLength.into());
-    }
-
-    let connection_id = &msg.channel().connection_hops()[0];
-    let connection_end = ctx
-        .connection_end(connection_id)
-        .ok_or_else(|| Kind::MissingConnection(connection_id.clone()))?;
-
-    if !connection_end.state_matches(&ConnectionState::Open) {
-        return Err(ConnectionNotOpen(connection_id.clone()).into());
-    }
-
-    let get_versions = connection_end.versions();
-    let version = match get_versions.as_slice() {
-        [version] => version,
-        _ => return Err(Kind::InvalidVersionLengthConnection.into()),
-    };
-
-    let channel_feature = msg.channel().ordering().as_string().to_string();
-    if !version.is_supported_feature(&channel_feature) {
-        return Err(Kind::ChannelFeatureNotSuportedByConnection.into());
-    }
-
-    //Channel capabilities
-    let cap = ctx.port_capability(msg.port_id());
-    let channel_cap = match cap {
-        Some(key) => {
-            if !ctx.capability_authentification(msg.port_id(), &key) {
-                return Err(Kind::InvalidPortCapability.into());
-            } else {
-                key
-            }
-        }
-        None => return Err(Kind::NoPortCapability.into()),
-    };
-
-    if msg.channel().version().is_empty() {
-        return Err(Kind::InvalidVersion.into());
-    }
 
     // Proof verification in two steps:
     // 1. Setup: build the Channel as we expect to find it on the other party.
@@ -128,19 +87,19 @@ pub(crate) fn process(
         msg.counterparty_version().clone(),
     );
 
-    verify_proofs(ctx, &new_channel_end, &expected_channel_end, msg.proofs())
+    verify::verify_proofs(ctx, &channel_end, &expected_channel_end, msg.proofs())
         .map_err(|e| Kind::FailedChanneOpenTryVerification.context(e))?;
 
     output.log("success: channel open try ");
 
     // Transition the connection end to the new state & pick a version.
-    new_channel_end.set_state(State::TryOpen);
+    channel_end.set_state(State::TryOpen);
 
     let result = ChannelResult {
         port_id: msg.port_id().clone(),
         channel_cap,
         channel_id: msg.previous_channel_id().clone(),
-        channel_end: new_channel_end,
+        channel_end,
     };
 
     let event_attributes = Attributes {

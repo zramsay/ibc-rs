@@ -27,7 +27,7 @@ pub(crate) fn process(
                 .ok_or_else(|| Kind::ConnectionNotFound(prev_id.clone()))?;
 
             // Validate that existing connection end matches with the one we're trying to establish.
-            if old_connection_end.state_matches(&State::Init)
+            if old_connection_end.state_matches(State::Init)
                 && old_connection_end.counterparty_matches(&msg.counterparty())
                 && old_connection_end.client_id_matches(msg.client_id())
                 && old_connection_end.delay_period == msg.delay_period

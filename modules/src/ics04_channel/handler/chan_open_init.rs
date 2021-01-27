@@ -4,9 +4,9 @@ use crate::events::IBCEvent;
 use crate::handler::{HandlerOutput, HandlerResult};
 use crate::ics04_channel::channel::{ChannelEnd, State};
 use crate::ics04_channel::context::ChannelReader;
-use crate::ics04_channel::error::{Error, Kind};
+use crate::ics04_channel::error::Error;
 use crate::ics04_channel::events::Attributes;
-use crate::ics04_channel::handler::ChannelResult;
+use crate::ics04_channel::handler::{verify, ChannelResult};
 use crate::ics04_channel::msgs::chan_open_init::MsgChannelOpenInit;
 
 pub(crate) fn process(
@@ -15,48 +15,12 @@ pub(crate) fn process(
 ) -> HandlerResult<ChannelResult, Error> {
     let mut output = HandlerOutput::builder();
 
-    let cap = ctx.port_capability(&msg.port_id().clone());
-    let cap_key;
+    let port_id = msg.port_id().clone();
+    let (_, _, channel_cap) =
+        verify::verify_connection_and_capability(ctx, msg.channel(), &port_id)?;
 
-    match cap {
-        Some(key) => {
-            if !ctx.capability_authentification(&msg.port_id().clone(), &key) {
-                return Err(Kind::InvalidPortCapability.into());
-            } else {
-                cap_key = key;
-            }
-        }
-        None => return Err(Kind::NoPortCapability.into()),
-    }
-
-    if msg.channel().connection_hops().len() != 1 {
-        return Err(Kind::InvalidConnectionHopsLength.into());
-    }
-
-    // An IBC connection running on the local (host) chain should exist.
-
-    let connection_id = &msg.channel().connection_hops()[0];
-    let connection_end = ctx.connection_end(connection_id);
-
-    let conn = connection_end.ok_or_else(|| Kind::MissingConnection(connection_id.clone()))?;
-
-    let get_versions = conn.versions();
-    let version = match get_versions.as_slice() {
-        [version] => version,
-        _ => return Err(Kind::InvalidVersionLengthConnection.into()),
-    };
-
-    let channel_feature = msg.channel().ordering().as_string().to_string();
-    if !version.is_supported_feature(&channel_feature) {
-        return Err(Kind::ChannelFeatureNotSuportedByConnection.into());
-    }
-
-    // TODO: Check that `version` is non empty but not necessary coherent
-    if msg.channel().version().is_empty() {
-        return Err(Kind::InvalidVersion.into());
-    }
-
-    let new_channel_end = ChannelEnd::new(
+    // TODO: can we just clone `msg.channel()` (after checking that its state is `State::Init`)?
+    let channel_end = ChannelEnd::new(
         State::Init,
         msg.channel().ordering(),
         msg.channel().counterparty().clone(),
@@ -67,10 +31,10 @@ pub(crate) fn process(
     output.log("success: no channel found");
 
     let result = ChannelResult {
-        port_id: msg.port_id().clone(),
+        port_id,
         channel_id: None,
-        channel_end: new_channel_end,
-        channel_cap: cap_key,
+        channel_end,
+        channel_cap,
     };
 
     let event_attributes = Attributes {

@@ -100,8 +100,8 @@ impl ConnectionEnd {
     }
 
     /// Getter for the state of this connection end.
-    pub fn state(&self) -> &State {
-        &self.state
+    pub fn state(&self) -> State {
+        self.state
     }
 
     /// Setter for the `state` field.
@@ -131,8 +131,8 @@ impl ConnectionEnd {
     }
 
     /// Helper function to compare the state of this end with another state.
-    pub fn state_matches(&self, other: &State) -> bool {
-        self.state.eq(other)
+    pub fn state_matches(&self, other: State) -> bool {
+        self.state.eq(&other)
     }
 
     /// Getter for the client id on the local party of this connection end.
@@ -245,7 +245,7 @@ impl Counterparty {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 pub enum State {
     Uninitialized = 0,
     Init = 1,
