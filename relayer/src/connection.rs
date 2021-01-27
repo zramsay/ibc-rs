@@ -293,7 +293,7 @@ impl Connection {
 
         // Check if a connection is expected to exist on destination chain
         // A connection must exist on destination chain for Ack and Confirm Tx-es to succeed
-        if dst_connection.state_matches(&State::Uninitialized) {
+        if dst_connection.state_matches(State::Uninitialized) {
             return Err(ConnectionError::Failed(format!(
                 "missing connection {} on source chain {}",
                 self.src_connection_id().clone(),

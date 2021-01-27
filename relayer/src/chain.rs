@@ -243,21 +243,21 @@ pub trait Chain: Sized {
         // Check that the connection state is compatible with the message
         match message_type {
             ConnectionMsgType::OpenTry => {
-                if !connection_end.state_matches(&State::Init)
-                    && !connection_end.state_matches(&State::TryOpen)
+                if !connection_end.state_matches(State::Init)
+                    && !connection_end.state_matches(State::TryOpen)
                 {
                     return Err(Kind::ConnOpenTry("bad connection state".to_string()).into());
                 }
             }
             ConnectionMsgType::OpenAck => {
-                if !connection_end.state_matches(&State::TryOpen)
-                    && !connection_end.state_matches(&State::Open)
+                if !connection_end.state_matches(State::TryOpen)
+                    && !connection_end.state_matches(State::Open)
                 {
                     return Err(Kind::ConnOpenTry("bad connection state".to_string()).into());
                 }
             }
             ConnectionMsgType::OpenConfirm => {
-                if !connection_end.state_matches(&State::Open) {
+                if !connection_end.state_matches(State::Open) {
                     return Err(Kind::ConnOpenTry("bad connection state".to_string()).into());
                 }
             }
