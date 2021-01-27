@@ -19,66 +19,75 @@ pub(crate) fn process(
     // Check the client's (consensus state) proof height.
     check_client_consensus_height(ctx, msg.consensus_height())?;
 
+    let MsgConnectionOpenAck {
+        connection_id,
+        counterparty_connection_id,
+        client_state,
+        proofs,
+        version,
+        signer: _,
+    } = msg;
+
     // Unwrap the old connection end & validate it.
-    let mut new_conn_end = match ctx.connection_end(&msg.connection_id) {
+    let mut connection_end = match ctx.connection_end(&connection_id) {
         // A connection end must exist and must be Init or TryOpen; otherwise we return an error.
-        Some(old_conn_end) => {
+        Some(connection_end) => {
             // Check if the connection state is either Init or TryOpen and message version
             // is compatible.
-            let state_is_consistent = old_conn_end.state_matches(State::Init)
-                && old_conn_end.versions().contains(&msg.version)
-                || old_conn_end.state_matches(State::TryOpen)
-                    && old_conn_end.versions().get(0).eq(&Some(&msg.version));
+            let state_is_consistent = connection_end.state_matches(State::Init)
+                && connection_end.versions().contains(&version)
+                || connection_end.state_matches(State::TryOpen)
+                    && connection_end.versions().get(0).eq(&Some(&version));
 
             // Check that if the msg's counterparty connection id is not empty then it matches
             // the old connection's counterparty.
-            let counterparty_matches = msg.counterparty_connection_id.is_none()
-                || old_conn_end.counterparty().connection_id() == &msg.counterparty_connection_id;
+            let counterparty_matches = counterparty_connection_id.is_none()
+                || connection_end.counterparty().connection_id() == &counterparty_connection_id;
 
             if state_is_consistent && counterparty_matches {
-                old_conn_end
+                connection_end
             } else {
                 // Old connection end is in incorrect state, propagate the error.
-                return Err(Kind::ConnectionMismatch(msg.connection_id).into());
+                return Err(Kind::ConnectionMismatch(connection_id).into());
             }
         }
         None => {
             // No connection end exists for this conn. identifier. Impossible to continue handshake.
-            return Err(Kind::UninitializedConnection(msg.connection_id).into());
+            return Err(Kind::UninitializedConnection(connection_id).into());
         }
     };
 
     // Proof verification.
-    let expected_conn = ConnectionEnd::new(
+    let expected_connection_end = ConnectionEnd::new(
         State::TryOpen,
-        new_conn_end.counterparty().client_id().clone(),
+        connection_end.counterparty().client_id().clone(),
         Counterparty::new(
             // The counterparty is the local chain.
-            new_conn_end.client_id().clone(), // The local client identifier.
-            msg.counterparty_connection_id.clone(), // This chain's connection id as known on counterparty.
-            ctx.commitment_prefix(),                // Local commitment prefix.
+            connection_end.client_id().clone(), // The local client identifier.
+            counterparty_connection_id.clone(), // This chain's connection id as known on counterparty.
+            ctx.commitment_prefix(),            // Local commitment prefix.
         ),
-        vec![msg.version.clone()],
-        new_conn_end.delay_period,
+        vec![version.clone()],
+        connection_end.delay_period,
     );
 
     // 2. Pass the details to the verification function.
     verify_proofs(
         ctx,
-        &msg.client_state,
-        &new_conn_end,
-        &expected_conn,
-        &msg.proofs,
+        &client_state,
+        &connection_end,
+        &expected_connection_end,
+        &proofs,
     )?;
 
     output.log("success: connection verification passed");
 
-    new_conn_end.set_state(State::Open);
-    new_conn_end.set_version(msg.version.clone());
+    connection_end.set_state(State::Open);
+    connection_end.set_version(version);
 
     let result = ConnectionResult {
-        connection_end: new_conn_end,
-        connection_id: Some(msg.connection_id.clone()),
+        connection_end,
+        connection_id: Some(connection_id),
     };
 
     let event_attributes = Attributes {

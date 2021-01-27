@@ -15,24 +15,32 @@ pub(crate) fn process(
 ) -> HandlerResult<ConnectionResult, Error> {
     let mut output = HandlerOutput::builder();
 
+    let MsgConnectionOpenInit {
+        client_id,
+        counterparty,
+        version: _,
+        delay_period,
+        signer: _,
+    } = msg;
+
     // An IBC client running on the local (host) chain should exist.
-    if ctx.client_state(&msg.client_id).is_none() {
-        return Err(Kind::MissingClient(msg.client_id).into());
+    if ctx.client_state(&client_id).is_none() {
+        return Err(Kind::MissingClient(client_id).into());
     }
 
-    let new_connection_end = ConnectionEnd::new(
+    let connection_end = ConnectionEnd::new(
         State::Init,
-        msg.client_id.clone(),
-        msg.counterparty.clone(),
+        client_id,
+        counterparty,
         ctx.get_compatible_versions(),
-        msg.delay_period,
+        delay_period,
     );
 
     output.log("success: no connection found");
 
     let result = ConnectionResult {
         connection_id: None,
-        connection_end: new_connection_end,
+        connection_end,
     };
 
     let event_attributes = Attributes {

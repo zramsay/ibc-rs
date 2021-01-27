@@ -15,17 +15,21 @@ pub(crate) fn process(
 ) -> HandlerResult<ChannelResult, Error> {
     let mut output = HandlerOutput::builder();
 
-    let port_id = msg.port_id.clone();
-    let (_, _, channel_cap) =
-        verify::verify_connection_and_capability(ctx, &msg.channel, &port_id)?;
+    let MsgChannelOpenInit {
+        port_id,
+        channel,
+        signer: _,
+    } = msg;
+
+    let (_, _, channel_cap) = verify::verify_connection_and_capability(ctx, &channel, &port_id)?;
 
     // TODO: can we just clone `msg.channel()` (after checking that its state is `State::Init`)?
     let channel_end = ChannelEnd::new(
         State::Init,
-        msg.channel.ordering(),
-        msg.channel.counterparty().clone(),
-        msg.channel.connection_hops().clone(),
-        msg.channel.version().clone(),
+        channel.ordering(),
+        channel.counterparty().clone(),
+        channel.connection_hops().clone(),
+        channel.version().clone(),
     );
 
     output.log("success: no channel found");

@@ -19,73 +19,77 @@ pub(crate) fn process(
     // Check that consensus height (for client proof) in message is not too advanced nor too old.
     check_client_consensus_height(ctx, msg.consensus_height())?;
 
+    let MsgConnectionOpenTry {
+        previous_connection_id,
+        client_id,
+        client_state,
+        counterparty,
+        counterparty_versions,
+        proofs,
+        delay_period,
+        signer: _,
+    } = msg;
+
     // Unwrap the old connection end (if any) and validate it against the message.
-    let mut new_connection_end = match msg.previous_connection_id.as_ref() {
-        Some(prev_id) => {
-            let old_connection_end = ctx
-                .connection_end(prev_id)
-                .ok_or_else(|| Kind::ConnectionNotFound(prev_id.clone()))?;
+    let mut connection_end = match previous_connection_id.as_ref() {
+        Some(previous_connection_end) => {
+            let connection_end = ctx
+                .connection_end(previous_connection_end)
+                .ok_or_else(|| Kind::ConnectionNotFound(previous_connection_end.clone()))?;
 
             // Validate that existing connection end matches with the one we're trying to establish.
-            if old_connection_end.state_matches(State::Init)
-                && old_connection_end.counterparty_matches(&msg.counterparty)
-                && old_connection_end.client_id_matches(&msg.client_id)
-                && old_connection_end.delay_period == msg.delay_period
+            if connection_end.state_matches(State::Init)
+                && connection_end.counterparty_matches(&counterparty)
+                && connection_end.client_id_matches(&client_id)
+                && connection_end.delay_period == delay_period
             {
                 // A ConnectionEnd already exists and all validation passed.
-                Ok(old_connection_end)
+                connection_end
             } else {
                 // A ConnectionEnd already exists and validation failed.
-                Err(Into::<Error>::into(
-                    Kind::ConnectionMismatch(prev_id.clone())
-                        .context(old_connection_end.client_id().to_string()),
-                ))
+                return Err(Kind::ConnectionMismatch(previous_connection_end.clone())
+                    .context(connection_end.client_id().to_string())
+                    .into());
             }
         }
         // No connection id was supplied, create a new connection end. Note: the id is assigned
         // by the ConnectionKeeper.
-        None => Ok(ConnectionEnd::new(
+        None => ConnectionEnd::new(
             State::Init,
-            msg.client_id.clone(),
-            msg.counterparty.clone(),
-            msg.counterparty_versions.clone(),
-            msg.delay_period,
-        )),
-    }?;
+            client_id.clone(),
+            counterparty.clone(),
+            counterparty_versions.clone(),
+            delay_period,
+        ),
+    };
 
     // Proof verification in two steps:
     // 1. Setup: build the ConnectionEnd as we expect to find it on the other party.
     let expected_conn = ConnectionEnd::new(
         State::Init,
-        msg.counterparty.client_id().clone(),
-        Counterparty::new(msg.client_id.clone(), None, ctx.commitment_prefix()),
-        msg.counterparty_versions.clone(),
-        msg.delay_period,
+        counterparty.client_id().clone(),
+        Counterparty::new(client_id, None, ctx.commitment_prefix()),
+        counterparty_versions.clone(),
+        delay_period,
     );
 
     // 2. Pass the details to the verification function.
-    verify_proofs(
-        ctx,
-        &msg.client_state,
-        &new_connection_end,
-        &expected_conn,
-        &msg.proofs,
-    )?;
+    verify_proofs(ctx, &client_state, &connection_end, &expected_conn, &proofs)?;
 
     // Transition the connection end to the new state & pick a version.
-    new_connection_end.set_state(State::TryOpen);
+    connection_end.set_state(State::TryOpen);
 
     // Pick the version.
-    new_connection_end.set_version(
-        ctx.pick_version(&ctx.get_compatible_versions(), &msg.counterparty_versions)
+    connection_end.set_version(
+        ctx.pick_version(&ctx.get_compatible_versions(), &counterparty_versions)
             .ok_or(Kind::NoCommonVersion)?,
     );
 
     output.log("success: connection verification passed");
 
     let result = ConnectionResult {
-        connection_id: msg.previous_connection_id,
-        connection_end: new_connection_end,
+        connection_id: previous_connection_id,
+        connection_end,
     };
 
     // TODO: move connection id decision (`next_connection_id` method) in ClientReader

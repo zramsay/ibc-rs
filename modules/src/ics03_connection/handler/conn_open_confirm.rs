@@ -16,48 +16,60 @@ pub(crate) fn process(
 ) -> HandlerResult<ConnectionResult, Error> {
     let mut output = HandlerOutput::builder();
 
+    let MsgConnectionOpenConfirm {
+        connection_id,
+        proofs,
+        signer: _,
+    } = msg;
+
     // Unwrap the old connection end & validate it.
-    let mut new_conn_end = match ctx.connection_end(&msg.connection_id) {
+    let mut connection_end = match ctx.connection_end(&connection_id) {
         // A connection end must exist and must be in TryOpen state; otherwise return error.
-        Some(old_conn_end) => {
-            if !(old_conn_end.state_matches(State::TryOpen)) {
+        Some(connection_end) => {
+            if !(connection_end.state_matches(State::TryOpen)) {
                 // Old connection end is in incorrect state, propagate the error.
-                return Err(Kind::ConnectionMismatch(msg.connection_id).into());
+                return Err(Kind::ConnectionMismatch(connection_id).into());
             } else {
-                old_conn_end
+                connection_end
             }
         }
         None => {
             // No connection end exists for this conn. identifier. Impossible to continue handshake.
-            return Err(Kind::UninitializedConnection(msg.connection_id).into());
+            return Err(Kind::UninitializedConnection(connection_id).into());
         }
     };
 
     // Verify proofs. Assemble the connection end as we expect to find it on the counterparty.
-    let expected_conn = ConnectionEnd::new(
+    let expected_connection_end = ConnectionEnd::new(
         State::Open,
-        new_conn_end.counterparty().client_id().clone(),
+        connection_end.counterparty().client_id().clone(),
         Counterparty::new(
             // The counterparty is the local chain.
-            new_conn_end.client_id().clone(), // The local client identifier.
-            Some(msg.connection_id.clone()),  // Local connection id.
-            ctx.commitment_prefix(),          // Local commitment prefix.
+            connection_end.client_id().clone(), // The local client identifier.
+            Some(connection_id.clone()),        // Local connection id.
+            ctx.commitment_prefix(),            // Local commitment prefix.
         ),
-        new_conn_end.versions().clone(),
-        new_conn_end.delay_period,
+        connection_end.versions().clone(),
+        connection_end.delay_period,
     );
 
     // 2. Pass the details to the verification function.
-    verify_proofs(ctx, &None, &new_conn_end, &expected_conn, &msg.proofs)?;
+    verify_proofs(
+        ctx,
+        &None,
+        &connection_end,
+        &expected_connection_end,
+        &proofs,
+    )?;
 
     output.log("success: connection verification passed");
 
     // Transition our own end of the connection to state OPEN.
-    new_conn_end.set_state(State::Open);
+    connection_end.set_state(State::Open);
 
     let result = ConnectionResult {
-        connection_id: Some(msg.connection_id.clone()),
-        connection_end: new_conn_end,
+        connection_id: Some(connection_id),
+        connection_end,
     };
 
     let event_attributes = Attributes {
@@ -129,10 +141,7 @@ mod tests {
                 ctx: context
                     .clone()
                     .with_client(&client_id, Height::new(0, 10))
-                    .with_connection(
-                        msg_confirm.connection_id.clone(),
-                        incorrect_conn_end_state,
-                    ),
+                    .with_connection(msg_confirm.connection_id.clone(), incorrect_conn_end_state),
                 msg: ConnectionMsg::ConnectionOpenConfirm(msg_confirm.clone()),
                 want_pass: false,
             },

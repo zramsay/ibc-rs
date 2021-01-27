@@ -27,19 +27,25 @@ pub fn process(
 ) -> HandlerResult<ClientResult, Error> {
     let mut output = HandlerOutput::builder();
 
+    let MsgCreateAnyClient {
+        client_state,
+        consensus_state,
+        signer: _,
+    } = msg;
+
     // Construct this client's identifier
     let id_counter = ctx.client_counter();
-    let client_id = ClientId::new(msg.client_state.client_type(), id_counter).map_err(|e| {
-        Kind::ClientIdentifierConstructor(msg.client_state.client_type(), id_counter).context(e)
+    let client_id = ClientId::new(client_state.client_type(), id_counter).map_err(|e| {
+        Kind::ClientIdentifierConstructor(client_state.client_type(), id_counter).context(e)
     })?;
 
     output.log("success: generated new client identifier");
 
     let result = ClientResult::Create(Result {
         client_id: client_id.clone(),
-        client_type: msg.client_state.client_type(),
-        client_state: msg.client_state,
-        consensus_state: msg.consensus_state,
+        client_type: client_state.client_type(),
+        client_state: client_state,
+        consensus_state: consensus_state,
     });
 
     let event_attributes = Attributes {

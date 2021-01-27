@@ -16,10 +16,17 @@ pub(crate) fn process(
 ) -> HandlerResult<ChannelResult, Error> {
     let mut output = HandlerOutput::builder();
 
-    let port_id = msg.port_id.clone();
-    let channel_id = msg.previous_channel_id.clone();
+    let MsgChannelOpenTry {
+        port_id,
+        previous_channel_id,
+        channel,
+        counterparty_version,
+        proofs,
+        signer: _,
+    } = msg;
+
     let (connection_id, connection_end, channel_cap) =
-        verify::verify_connection_and_capability(ctx, &msg.channel, &port_id)?;
+        verify::verify_connection_and_capability(ctx, &channel, &port_id)?;
 
     if !connection_end.state_matches(ConnectionState::Open) {
         return Err(Kind::ConnectionNotOpen(connection_id.clone()).into());
@@ -27,29 +34,29 @@ pub(crate) fn process(
 
     // Unwrap the old channel end (if any) and validate it against the message.
     // TODO: can we create the channel end just once? the `old_channel_end` should be used just for verification
-    let mut channel_end = match channel_id.as_ref() {
+    let mut channel_end = match previous_channel_id.as_ref() {
         Some(channel_id) => {
             let port_channel_id = (port_id.clone(), channel_id.clone());
-            let old_channel_end = ctx
+            let channel_end = ctx
                 .channel_end(&port_channel_id)
                 .ok_or_else(|| Kind::ChannelNotFound.context(channel_id.to_string()))?;
 
             // Validate that existing channel end matches with the one we're trying to establish.
 
-            if old_channel_end.state_matches(State::Init)
-                && old_channel_end.order_matches(msg.channel.ordering())
-                && old_channel_end.connection_hops_matches(msg.channel.connection_hops())
-                && old_channel_end.counterparty_matches(msg.channel.counterparty())
+            if channel_end.state_matches(State::Init)
+                && channel_end.order_matches(channel.ordering())
+                && channel_end.connection_hops_matches(channel.connection_hops())
+                && channel_end.counterparty_matches(channel.counterparty())
                // && old_channel_end.version_matches(&msg.counterparty_version().clone())
-               && old_channel_end.version_matches(msg.channel.version())
+               && channel_end.version_matches(channel.version())
             {
                 // A ChannelEnd already exists and all validation passed.
-                old_channel_end
+                channel_end
             } else {
                 // A ConnectionEnd already exists and validation failed.
                 return Err(Kind::ChannelMismatch(channel_id.clone())
                     .context(
-                        old_channel_end
+                        channel_end
                             .counterparty()
                             .channel_id()
                             .clone()
@@ -63,10 +70,10 @@ pub(crate) fn process(
         // by the ChannelKeeper.
         None => ChannelEnd::new(
             State::Init,
-            msg.channel.ordering(),
-            msg.channel.counterparty().clone(),
-            msg.channel.connection_hops().clone(),
-            msg.counterparty_version.clone(),
+            channel.ordering(),
+            channel.counterparty().clone(),
+            channel.connection_hops().clone(),
+            counterparty_version.clone(),
         ),
     };
 
@@ -76,8 +83,8 @@ pub(crate) fn process(
     // TODO: should we set `channel_id` here?
     let expected_counterparty = Counterparty::new(port_id.clone(), None);
 
-    let counterparty = connection_end.counterparty();
-    let counterparty_connection_id = counterparty
+    let counterparty_connection_id = connection_end
+        .counterparty()
         .connection_id()
         .clone()
         .ok_or_else(|| Kind::UndefinedConnectionCounterparty(connection_id.clone()))?;
@@ -86,13 +93,13 @@ pub(crate) fn process(
 
     let expected_channel_end = ChannelEnd::new(
         State::Init,
-        msg.channel.ordering(),
+        channel.ordering(),
         expected_counterparty,
         expected_connection_hops,
-        msg.counterparty_version.clone(),
+        counterparty_version.clone(),
     );
 
-    verify::verify_proofs(ctx, &channel_end, &expected_channel_end, &msg.proofs)
+    verify::verify_proofs(ctx, &channel_end, &expected_channel_end, &proofs)
         .map_err(|e| Kind::FailedChanneOpenTryVerification.context(e))?;
 
     output.log("success: channel open try ");
@@ -102,11 +109,12 @@ pub(crate) fn process(
 
     let result = ChannelResult {
         port_id,
-        channel_id,
+        channel_id: previous_channel_id,
         channel_cap,
         channel_end,
     };
 
+    // TODO: set the channel id
     let event_attributes = Attributes {
         channel_id: None,
         ..Default::default()
