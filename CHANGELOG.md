@@ -10,6 +10,8 @@
 - [relayer-cli]
   - Implement command to query the channels associated with a connection ([#505])
   - JSON output for queries and txs ([#500])
+- [relayer]
+  - Added retry mechanism, restructured relayer ([#519])
 
 ### IMPROVEMENTS
 
@@ -19,7 +21,7 @@
 - [relayer-cli]
   - Replace `ChannelConfig` in `Channel::new` ([#511])
   - Add `packet-send` CLI ([#470])
-  - UX improvements for relayer txs ([#536, #540])
+  - UX improvements for relayer txs ([#536, #540, #554])
 
 - [relayer]
   - Performance improvements ([#514], [#537])
@@ -39,6 +41,7 @@
 - [modules]
   - The `ibc::handler::Event` is removed and handlers now produce `ibc::events::IBCEvent`s ([#535])
 
+[#32]: https://github.com/informalsystems/ibc-rs/issues/32
 [#94]: https://github.com/informalsystems/ibc-rs/issues/94
 [#306]: https://github.com/informalsystems/ibc-rs/issues/306
 [#470]: https://github.com/informalsystems/ibc-rs/issues/470
@@ -49,13 +52,14 @@
 [#513]: https://github.com/informalsystems/ibc-rs/issues/513
 [#514]: https://github.com/informalsystems/ibc-rs/issues/514
 [#517]: https://github.com/informalsystems/ibc-rs/issues/517
+[#519]: https://github.com/informalsystems/ibc-rs/issues/519
 [#525]: https://github.com/informalsystems/ibc-rs/issues/525
 [#527]: https://github.com/informalsystems/ibc-rs/issues/527
-[#32]: https://github.com/informalsystems/ibc-rs/issues/32
+[#535]: https://github.com/informalsystems/ibc-rs/issues/535
 [#536]: https://github.com/informalsystems/ibc-rs/issues/536
 [#537]: https://github.com/informalsystems/ibc-rs/issues/537
 [#540]: https://github.com/informalsystems/ibc-rs/issues/540
-[#535]: https://github.com/informalsystems/ibc-rs/issues/535
+[#554]: https://github.com/informalsystems/ibc-rs/issues/554
 
 
 ## v0.0.6
