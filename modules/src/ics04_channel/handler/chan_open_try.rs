@@ -2,12 +2,12 @@
 
 use crate::events::IBCEvent;
 use crate::handler::{HandlerOutput, HandlerResult};
+use crate::ics03_connection::connection::State as ConnectionState;
 use crate::ics04_channel::channel::{ChannelEnd, Counterparty, State};
 use crate::ics04_channel::context::ChannelReader;
 use crate::ics04_channel::error::{Error, Kind};
 use crate::ics04_channel::events::Attributes;
-use crate::ics04_channel::handler::verify;
-use crate::ics04_channel::handler::ChannelResult;
+use crate::ics04_channel::handler::{verify, ChannelResult};
 use crate::ics04_channel::msgs::chan_open_try::MsgChannelOpenTry;
 
 pub(crate) fn process(
@@ -21,6 +21,10 @@ pub(crate) fn process(
     let (connection_id, connection_end, channel_cap) =
         verify::verify_connection_and_capability(ctx, msg.channel(), &port_id)?;
 
+    if !connection_end.state_matches(ConnectionState::Open) {
+        return Err(Kind::ConnectionNotOpen(connection_id.clone()).into());
+    }
+
     // Unwrap the old channel end (if any) and validate it against the message.
     // TODO: can we create the channel end just once? the `old_channel_end` should be used just for verification
     let mut channel_end = match channel_id.as_ref() {
@@ -32,7 +36,7 @@ pub(crate) fn process(
 
             // Validate that existing channel end matches with the one we're trying to establish.
 
-            if old_channel_end.state_matches(&State::Init)
+            if old_channel_end.state_matches(State::Init)
                 && old_channel_end.order_matches(msg.channel.ordering())
                 && old_channel_end.connection_hops_matches(msg.channel.connection_hops())
                 && old_channel_end.counterparty_matches(msg.channel.counterparty())

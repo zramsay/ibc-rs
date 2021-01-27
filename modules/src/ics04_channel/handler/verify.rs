@@ -1,6 +1,6 @@
 use crate::ics02_client::state::ClientState;
 use crate::ics02_client::{client_def::AnyClient, client_def::ClientDef};
-use crate::ics03_connection::connection::{ConnectionEnd, State as ConnectionState};
+use crate::ics03_connection::connection::ConnectionEnd;
 use crate::ics04_channel::channel::ChannelEnd;
 use crate::ics04_channel::context::ChannelReader;
 use crate::ics04_channel::error::{Error, Kind};
@@ -22,11 +22,6 @@ pub(crate) fn verify_connection_and_capability(
     let connection_end = ctx
         .connection_end(&connection_id)
         .ok_or_else(|| Kind::MissingConnection(connection_id.clone()))?;
-
-    // TODO: this was not being checked in `chan_open_init.rs`
-    if !connection_end.state_matches(ConnectionState::Open) {
-        return Err(Kind::ConnectionNotOpen(connection_id.clone()).into());
-    }
 
     // Check that a single version has been negotiated.
     let version = match connection_end.versions().as_slice() {

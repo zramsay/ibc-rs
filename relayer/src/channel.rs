@@ -423,7 +423,7 @@ impl Channel {
 
         // Check if a connection is expected to exist on destination chain
         // A channel must exist on destination chain for Ack and Confirm Tx-es to succeed
-        if dst_channel.state_matches(&State::Uninitialized) {
+        if dst_channel.state_matches(State::Uninitialized) {
             return Err(ChannelError::Failed(
                 "missing channel on source chain".to_string(),
             ));

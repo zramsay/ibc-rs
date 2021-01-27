@@ -149,8 +149,8 @@ impl ChannelEnd {
     }
 
     /// Helper function to compare the state of this end with another state.
-    pub fn state_matches(&self, other: &State) -> bool {
-        self.state.eq(other)
+    pub fn state_matches(&self, other: State) -> bool {
+        self.state.eq(&other)
     }
 
     /// Helper function to compare the order of this end with another order.

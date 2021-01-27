@@ -705,7 +705,7 @@ impl Link {
                 ))
             })?;
 
-        if !a_channel.state_matches(&ChannelState::Open) {
+        if !a_channel.state_matches(ChannelState::Open) {
             return Err(LinkError::Failed(format!(
                 "channel {} on chain {} not in open state",
                 a_channel_id.clone(),
