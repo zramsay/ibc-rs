@@ -3,7 +3,6 @@
 use crate::events::IBCEvent;
 use crate::handler::{HandlerOutput, HandlerResult};
 use crate::ics02_client::client_def::{AnyClientState, AnyConsensusState};
-use crate::ics02_client::client_type::ClientType;
 use crate::ics02_client::context::ClientReader;
 use crate::ics02_client::error::{Error, Kind};
 use crate::ics02_client::events::Attributes;
@@ -16,7 +15,6 @@ use crate::ics24_host::identifier::ClientId;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Result {
     pub client_id: ClientId,
-    pub client_type: ClientType,
     pub client_state: AnyClientState,
     pub consensus_state: AnyConsensusState,
 }
@@ -43,9 +41,8 @@ pub fn process(
 
     let result = ClientResult::Create(Result {
         client_id: client_id.clone(),
-        client_type: client_state.client_type(),
-        client_state: client_state,
-        consensus_state: consensus_state,
+        client_state,
+        consensus_state,
     });
 
     let event_attributes = Attributes {
@@ -107,8 +104,8 @@ mod tests {
                 );
                 match result {
                     ClientResult::Create(create_result) => {
-                        assert_eq!(create_result.client_type, ClientType::Mock);
                         assert_eq!(create_result.client_id, expected_client_id);
+                        assert_eq!(create_result.client_state.client_type(), ClientType::Mock);
                         assert_eq!(create_result.client_state, msg.client_state);
                         assert_eq!(create_result.consensus_state, msg.consensus_state);
                     }
@@ -197,8 +194,8 @@ mod tests {
                     );
                     match result {
                         ClientResult::Create(create_res) => {
-                            assert_eq!(create_res.client_type, msg.client_state.client_type());
                             assert_eq!(create_res.client_id, expected_client_id);
+                            assert_eq!(create_res.client_state.client_type(), ClientType::Mock);
                             assert_eq!(create_res.client_state, msg.client_state);
                             assert_eq!(create_res.consensus_state, msg.consensus_state);
                         }
@@ -258,8 +255,8 @@ mod tests {
                 );
                 match result {
                     ClientResult::Create(create_res) => {
-                        assert_eq!(create_res.client_type, ClientType::Tendermint);
                         assert_eq!(create_res.client_id, expected_client_id);
+                        assert_eq!(create_res.client_state.client_type(), ClientType::Mock);
                         assert_eq!(create_res.client_state, msg.client_state);
                         assert_eq!(create_res.consensus_state, msg.consensus_state);
                     }
