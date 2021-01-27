@@ -195,7 +195,10 @@ mod tests {
                     match result {
                         ClientResult::Create(create_res) => {
                             assert_eq!(create_res.client_id, expected_client_id);
-                            assert_eq!(create_res.client_state.client_type(), ClientType::Mock);
+                            assert_eq!(
+                                create_res.client_state.client_type(),
+                                msg.client_state.client_type()
+                            );
                             assert_eq!(create_res.client_state, msg.client_state);
                             assert_eq!(create_res.consensus_state, msg.consensus_state);
                         }
@@ -256,7 +259,10 @@ mod tests {
                 match result {
                     ClientResult::Create(create_res) => {
                         assert_eq!(create_res.client_id, expected_client_id);
-                        assert_eq!(create_res.client_state.client_type(), ClientType::Mock);
+                        assert_eq!(
+                            create_res.client_state.client_type(),
+                            ClientType::Tendermint
+                        );
                         assert_eq!(create_res.client_state, msg.client_state);
                         assert_eq!(create_res.consensus_state, msg.consensus_state);
                     }
