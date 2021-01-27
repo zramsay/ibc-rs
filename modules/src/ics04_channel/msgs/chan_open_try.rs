@@ -30,29 +30,6 @@ pub struct MsgChannelOpenTry {
     pub signer: AccountId,
 }
 
-impl MsgChannelOpenTry {
-    /// Getter: borrow the `port_id` from this message.
-    pub fn port_id(&self) -> &PortId {
-        &self.port_id
-    }
-
-    pub fn previous_channel_id(&self) -> &Option<ChannelId> {
-        &self.previous_channel_id
-    }
-
-    pub fn counterparty_version(&self) -> &String {
-        &self.counterparty_version
-    }
-
-    pub fn channel(&self) -> &ChannelEnd {
-        &self.channel
-    }
-
-    pub fn proofs(&self) -> &Proofs {
-        &self.proofs
-    }
-}
-
 impl Msg for MsgChannelOpenTry {
     type ValidationError = Error;
 
@@ -69,7 +46,7 @@ impl Msg for MsgChannelOpenTry {
     }
 
     fn validate_basic(&self) -> Result<(), ValidationError> {
-        match self.channel().counterparty().channel_id() {
+        match self.channel.counterparty().channel_id() {
             None => Err(ValidationKind::InvalidCounterpartyChannelId.into()),
             Some(_c) => Ok(()),
         }

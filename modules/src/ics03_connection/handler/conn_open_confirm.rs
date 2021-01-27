@@ -17,25 +17,21 @@ pub(crate) fn process(
     let mut output = HandlerOutput::builder();
 
     // Unwrap the old connection end & validate it.
-    let mut new_conn_end = match ctx.connection_end(msg.connection_id()) {
+    let mut new_conn_end = match ctx.connection_end(&msg.connection_id) {
         // A connection end must exist and must be in TryOpen state; otherwise return error.
         Some(old_conn_end) => {
             if !(old_conn_end.state_matches(State::TryOpen)) {
                 // Old connection end is in incorrect state, propagate the error.
-                Err(Into::<Error>::into(Kind::ConnectionMismatch(
-                    msg.connection_id().clone(),
-                )))
+                return Err(Kind::ConnectionMismatch(msg.connection_id).into());
             } else {
-                Ok(old_conn_end)
+                old_conn_end
             }
         }
         None => {
             // No connection end exists for this conn. identifier. Impossible to continue handshake.
-            Err(Into::<Error>::into(Kind::UninitializedConnection(
-                msg.connection_id().clone(),
-            )))
+            return Err(Kind::UninitializedConnection(msg.connection_id).into());
         }
-    }?;
+    };
 
     // Verify proofs. Assemble the connection end as we expect to find it on the counterparty.
     let expected_conn = ConnectionEnd::new(
@@ -44,7 +40,7 @@ pub(crate) fn process(
         Counterparty::new(
             // The counterparty is the local chain.
             new_conn_end.client_id().clone(), // The local client identifier.
-            Some(msg.connection_id().clone()), // Local connection id.
+            Some(msg.connection_id.clone()),  // Local connection id.
             ctx.commitment_prefix(),          // Local commitment prefix.
         ),
         new_conn_end.versions().clone(),
@@ -52,7 +48,7 @@ pub(crate) fn process(
     );
 
     // 2. Pass the details to the verification function.
-    verify_proofs(ctx, &None, &new_conn_end, &expected_conn, msg.proofs())?;
+    verify_proofs(ctx, &None, &new_conn_end, &expected_conn, &msg.proofs)?;
 
     output.log("success: connection verification passed");
 
@@ -60,7 +56,7 @@ pub(crate) fn process(
     new_conn_end.set_state(State::Open);
 
     let result = ConnectionResult {
-        connection_id: Some(msg.connection_id().clone()),
+        connection_id: Some(msg.connection_id.clone()),
         connection_end: new_conn_end,
     };
 
@@ -104,7 +100,7 @@ mod tests {
             MsgConnectionOpenConfirm::try_from(get_dummy_msg_conn_open_confirm()).unwrap();
         let counterparty = Counterparty::new(
             client_id.clone(),
-            Some(msg_confirm.connection_id().clone()),
+            Some(msg_confirm.connection_id.clone()),
             CommitmentPrefix::from(vec![]),
         );
 
@@ -134,7 +130,7 @@ mod tests {
                     .clone()
                     .with_client(&client_id, Height::new(0, 10))
                     .with_connection(
-                        msg_confirm.connection_id().clone(),
+                        msg_confirm.connection_id.clone(),
                         incorrect_conn_end_state,
                     ),
                 msg: ConnectionMsg::ConnectionOpenConfirm(msg_confirm.clone()),
@@ -144,7 +140,7 @@ mod tests {
                 name: "Processing successful".to_string(),
                 ctx: context
                     .with_client(&client_id, Height::new(0, 10))
-                    .with_connection(msg_confirm.connection_id().clone(), correct_conn_end),
+                    .with_connection(msg_confirm.connection_id.clone(), correct_conn_end),
                 msg: ConnectionMsg::ConnectionOpenConfirm(msg_confirm.clone()),
                 want_pass: true,
             },

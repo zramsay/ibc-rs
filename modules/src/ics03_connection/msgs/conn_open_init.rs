@@ -26,17 +26,8 @@ pub struct MsgConnectionOpenInit {
     pub signer: AccountId,
 }
 
+#[cfg(test)]
 impl MsgConnectionOpenInit {
-    /// Getter: borrow the `client_id` from this message.
-    pub fn client_id(&self) -> &ClientId {
-        &self.client_id
-    }
-
-    /// Getter: borrow the `counterparty` from this message.
-    pub fn counterparty(&self) -> &Counterparty {
-        &self.counterparty
-    }
-
     /// Setter for `client_id`. Amenable to chaining, since it consumes the input message.
     pub fn with_client_id(self, client_id: ClientId) -> Self {
         MsgConnectionOpenInit { client_id, ..self }

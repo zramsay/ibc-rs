@@ -15,17 +15,17 @@ pub(crate) fn process(
 ) -> HandlerResult<ChannelResult, Error> {
     let mut output = HandlerOutput::builder();
 
-    let port_id = msg.port_id().clone();
+    let port_id = msg.port_id.clone();
     let (_, _, channel_cap) =
-        verify::verify_connection_and_capability(ctx, msg.channel(), &port_id)?;
+        verify::verify_connection_and_capability(ctx, &msg.channel, &port_id)?;
 
     // TODO: can we just clone `msg.channel()` (after checking that its state is `State::Init`)?
     let channel_end = ChannelEnd::new(
         State::Init,
-        msg.channel().ordering(),
-        msg.channel().counterparty().clone(),
-        msg.channel().connection_hops().clone(),
-        msg.channel().version().clone(),
+        msg.channel.ordering(),
+        msg.channel.counterparty().clone(),
+        msg.channel.connection_hops().clone(),
+        msg.channel.version().clone(),
     );
 
     output.log("success: no channel found");
@@ -84,8 +84,8 @@ mod tests {
 
         let init_conn_end = ConnectionEnd::new(
             ConnectionState::Init,
-            msg_conn_init.client_id().clone(),
-            msg_conn_init.counterparty().clone(),
+            msg_conn_init.client_id.clone(),
+            msg_conn_init.counterparty.clone(),
             get_compatible_versions(),
             msg_conn_init.delay_period,
         );
@@ -119,7 +119,7 @@ mod tests {
                     .with_port_capability(
                         MsgChannelOpenInit::try_from(get_dummy_raw_msg_chan_open_init())
                             .unwrap()
-                            .port_id()
+                            .port_id
                             .clone(),
                     ),
                 msg: ChannelMsg::ChannelOpenInit(msg_chan_init),
@@ -150,7 +150,7 @@ mod tests {
                     let msg_init = test.msg.clone();
 
                     if let ChannelMsg::ChannelOpenInit(msg_init) = msg_init {
-                        assert_eq!(res.port_id.clone(), msg_init.port_id().clone());
+                        assert_eq!(res.port_id.clone(), msg_init.port_id.clone());
                     }
 
                     for e in proto_output.events.iter() {

@@ -22,18 +22,6 @@ pub struct MsgChannelOpenInit {
     pub signer: AccountId,
 }
 
-impl MsgChannelOpenInit {
-    /// Getter: borrow the `port_id` from this message.
-    pub fn port_id(&self) -> &PortId {
-        &self.port_id
-    }
-
-    /// Getter: borrow the `ChannelEnd` from this message.
-    pub fn channel(&self) -> &ChannelEnd {
-        &self.channel
-    }
-}
-
 impl Msg for MsgChannelOpenInit {
     type ValidationError = Error;
 

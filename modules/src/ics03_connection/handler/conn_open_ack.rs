@@ -20,37 +20,33 @@ pub(crate) fn process(
     check_client_consensus_height(ctx, msg.consensus_height())?;
 
     // Unwrap the old connection end & validate it.
-    let mut new_conn_end = match ctx.connection_end(msg.connection_id()) {
+    let mut new_conn_end = match ctx.connection_end(&msg.connection_id) {
         // A connection end must exist and must be Init or TryOpen; otherwise we return an error.
         Some(old_conn_end) => {
             // Check if the connection state is either Init or TryOpen and message version
             // is compatible.
             let state_is_consistent = old_conn_end.state_matches(State::Init)
-                && old_conn_end.versions().contains(msg.version())
+                && old_conn_end.versions().contains(&msg.version)
                 || old_conn_end.state_matches(State::TryOpen)
-                    && old_conn_end.versions().get(0).eq(&Some(msg.version()));
+                    && old_conn_end.versions().get(0).eq(&Some(&msg.version));
 
             // Check that if the msg's counterparty connection id is not empty then it matches
             // the old connection's counterparty.
-            let counterparty_matches = msg.counterparty_connection_id().is_none()
-                || old_conn_end.counterparty().connection_id() == msg.counterparty_connection_id();
+            let counterparty_matches = msg.counterparty_connection_id.is_none()
+                || old_conn_end.counterparty().connection_id() == &msg.counterparty_connection_id;
 
             if state_is_consistent && counterparty_matches {
-                Ok(old_conn_end)
+                old_conn_end
             } else {
                 // Old connection end is in incorrect state, propagate the error.
-                Err(Into::<Error>::into(Kind::ConnectionMismatch(
-                    msg.connection_id().clone(),
-                )))
+                return Err(Kind::ConnectionMismatch(msg.connection_id).into());
             }
         }
         None => {
             // No connection end exists for this conn. identifier. Impossible to continue handshake.
-            Err(Into::<Error>::into(Kind::UninitializedConnection(
-                msg.connection_id().clone(),
-            )))
+            return Err(Kind::UninitializedConnection(msg.connection_id).into());
         }
-    }?;
+    };
 
     // Proof verification.
     let expected_conn = ConnectionEnd::new(
@@ -59,30 +55,30 @@ pub(crate) fn process(
         Counterparty::new(
             // The counterparty is the local chain.
             new_conn_end.client_id().clone(), // The local client identifier.
-            msg.counterparty_connection_id().clone(), // This chain's connection id as known on counterparty.
-            ctx.commitment_prefix(),                   // Local commitment prefix.
+            msg.counterparty_connection_id.clone(), // This chain's connection id as known on counterparty.
+            ctx.commitment_prefix(),                // Local commitment prefix.
         ),
-        vec![msg.version().clone()],
+        vec![msg.version.clone()],
         new_conn_end.delay_period,
     );
 
     // 2. Pass the details to the verification function.
     verify_proofs(
         ctx,
-        msg.client_state(),
+        &msg.client_state,
         &new_conn_end,
         &expected_conn,
-        msg.proofs(),
+        &msg.proofs,
     )?;
 
     output.log("success: connection verification passed");
 
     new_conn_end.set_state(State::Open);
-    new_conn_end.set_version(msg.version().clone());
+    new_conn_end.set_version(msg.version.clone());
 
     let result = ConnectionResult {
         connection_end: new_conn_end,
-        connection_id: Some(msg.connection_id().clone()),
+        connection_id: Some(msg.connection_id.clone()),
     };
 
     let event_attributes = Attributes {
@@ -135,7 +131,7 @@ mod tests {
             ChainId::new("mockgaia".to_string(), 1),
             HostType::Mock,
             5,
-            Height::new(1, msg_ack.proofs().height().increment().revision_height),
+            Height::new(1, msg_ack.proofs.height().increment().revision_height),
         );
 
         // A connection end that will exercise the successful path.
@@ -144,10 +140,10 @@ mod tests {
             client_id.clone(),
             Counterparty::new(
                 client_id.clone(),
-                msg_ack.counterparty_connection_id().clone(),
+                msg_ack.counterparty_connection_id.clone(),
                 CommitmentPrefix::from(b"ibc".to_vec()),
             ),
-            vec![msg_ack.version().clone()],
+            vec![msg_ack.version.clone()],
             0_u64,
         );
 
@@ -161,7 +157,7 @@ mod tests {
         conn_end_prefix.set_state(State::Init);
         conn_end_prefix.set_counterparty(Counterparty::new(
             client_id.clone(),
-            msg_ack.counterparty_connection_id().clone(),
+            msg_ack.counterparty_connection_id.clone(),
             CommitmentPrefix::from(vec![]), // incorrect field
         ));
 

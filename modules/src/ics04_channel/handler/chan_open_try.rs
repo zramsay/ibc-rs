@@ -16,10 +16,10 @@ pub(crate) fn process(
 ) -> HandlerResult<ChannelResult, Error> {
     let mut output = HandlerOutput::builder();
 
-    let port_id = msg.port_id().clone();
-    let channel_id = msg.previous_channel_id().clone();
+    let port_id = msg.port_id.clone();
+    let channel_id = msg.previous_channel_id.clone();
     let (connection_id, connection_end, channel_cap) =
-        verify::verify_connection_and_capability(ctx, msg.channel(), &port_id)?;
+        verify::verify_connection_and_capability(ctx, &msg.channel, &port_id)?;
 
     if !connection_end.state_matches(ConnectionState::Open) {
         return Err(Kind::ConnectionNotOpen(connection_id.clone()).into());
@@ -66,14 +66,15 @@ pub(crate) fn process(
             msg.channel.ordering(),
             msg.channel.counterparty().clone(),
             msg.channel.connection_hops().clone(),
-            msg.counterparty_version().clone(),
+            msg.counterparty_version.clone(),
         ),
     };
 
     // Proof verification in two steps:
-    // 1. Setup: build the Channel as we expect to find it on the other party.
+    // 1. Setup: build the Channel as we expect to find on the other party.
 
-    let expected_counterparty = Counterparty::new(msg.port_id().clone(), None);
+    // TODO: should we set `channel_id` here?
+    let expected_counterparty = Counterparty::new(port_id.clone(), None);
 
     let counterparty = connection_end.counterparty();
     let counterparty_connection_id = counterparty
@@ -88,10 +89,10 @@ pub(crate) fn process(
         msg.channel.ordering(),
         expected_counterparty,
         expected_connection_hops,
-        msg.counterparty_version().clone(),
+        msg.counterparty_version.clone(),
     );
 
-    verify::verify_proofs(ctx, &channel_end, &expected_channel_end, msg.proofs())
+    verify::verify_proofs(ctx, &channel_end, &expected_channel_end, &msg.proofs)
         .map_err(|e| Kind::FailedChanneOpenTryVerification.context(e))?;
 
     output.log("success: channel open try ");
@@ -179,11 +180,11 @@ mod tests {
 
         let init_conn_end = ConnectionEnd::new(
             ConnectionState::Open,
-            msg_conn_init.client_id().clone(),
+            msg_conn_init.client_id.clone(),
             ConnectionCounterparty::new(
-                msg_conn_init.counterparty().client_id().clone(),
+                msg_conn_init.counterparty.client_id().clone(),
                 Some(ConnectionId::from_str("defaultConnection-0").unwrap()),
-                msg_conn_init.counterparty().prefix().clone(),
+                msg_conn_init.counterparty.prefix().clone(),
             ),
             get_compatible_versions(),
             msg_conn_init.delay_period,
@@ -217,7 +218,7 @@ mod tests {
             msg_chan_try2.channel.ordering(),
             msg_chan_try2.channel.counterparty().clone(),
             connection_vec,
-            msg_chan_try2.counterparty_version().clone(),
+            msg_chan_try2.counterparty_version.clone(),
         );
 
         //Used for Test "Processing connection does not match when a channel exists "
@@ -229,7 +230,7 @@ mod tests {
             msg_chan_try2.channel.ordering(),
             msg_chan_try2.channel.counterparty().clone(),
             connection_vec3,
-            msg_chan_try2.channel().version().clone(),
+            msg_chan_try2.channel.version().clone(),
         );
 
         let client_consensus_state_height = 10;
@@ -278,13 +279,13 @@ mod tests {
                     .with_port_capability(
                         MsgChannelOpenTry::try_from(get_dummy_raw_msg_chan_open_try(proof_height))
                             .unwrap()
-                            .port_id()
+                            .port_id
                             .clone(),
                     )
                     .with_channel_init(
                         MsgChannelOpenTry::try_from(get_dummy_raw_msg_chan_open_try(proof_height))
                             .unwrap()
-                            .port_id()
+                            .port_id
                             .clone(),
                         chan_id.clone(),
                         init_chan_end2,
@@ -300,13 +301,13 @@ mod tests {
                     .with_port_capability(
                         MsgChannelOpenTry::try_from(get_dummy_raw_msg_chan_open_try(proof_height))
                             .unwrap()
-                            .port_id()
+                            .port_id
                             .clone(),
                     )
                     .with_channel_init(
                         MsgChannelOpenTry::try_from(get_dummy_raw_msg_chan_open_try(proof_height))
                             .unwrap()
-                            .port_id()
+                            .port_id
                             .clone(),
                         chan_id.clone(),
                         init_chan_end3,
@@ -322,13 +323,13 @@ mod tests {
                     .with_port_capability(
                         MsgChannelOpenTry::try_from(get_dummy_raw_msg_chan_open_try(proof_height))
                             .unwrap()
-                            .port_id()
+                            .port_id
                             .clone(),
                     )
                     .with_channel_init(
                         MsgChannelOpenTry::try_from(get_dummy_raw_msg_chan_open_try(proof_height))
                             .unwrap()
-                            .port_id()
+                            .port_id
                             .clone(),
                         chan_id.clone(),
                         init_chan_end.clone(),
@@ -341,20 +342,20 @@ mod tests {
                 ctx: context
                     .clone()
                     .with_client(
-                        msg_conn_try.client_id(),
+                        &msg_conn_try.client_id,
                         Height::new(0, client_consensus_state_height),
                     )
                     .with_connection(cid.clone(), init_conn_end.clone())
                     .with_port_capability(
                         MsgChannelOpenTry::try_from(get_dummy_raw_msg_chan_open_try(proof_height))
                             .unwrap()
-                            .port_id()
+                            .port_id
                             .clone(),
                     )
                     .with_channel_init(
                         MsgChannelOpenTry::try_from(get_dummy_raw_msg_chan_open_try(proof_height))
                             .unwrap()
-                            .port_id()
+                            .port_id
                             .clone(),
                         chan_id,
                         init_chan_end.clone(),
@@ -366,14 +367,14 @@ mod tests {
                 name: "Good parameters: No channel Open Init found".to_string(),
                 ctx: context
                     .with_client(
-                        msg_conn_try.client_id(),
+                        &msg_conn_try.client_id,
                         Height::new(0, client_consensus_state_height),
                     )
                     .with_connection(cid, init_conn_end)
                     .with_port_capability(
                         MsgChannelOpenTry::try_from(get_dummy_raw_msg_chan_open_try(proof_height))
                             .unwrap()
-                            .port_id()
+                            .port_id
                             .clone(),
                     )
                     .with_channel_init(

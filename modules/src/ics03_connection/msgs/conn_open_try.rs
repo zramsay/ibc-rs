@@ -35,37 +35,8 @@ pub struct MsgConnectionOpenTry {
 }
 
 impl MsgConnectionOpenTry {
-    /// Getter for accessing the previous connection identifier of this message.
-    pub fn previous_connection_id(&self) -> &Option<ConnectionId> {
-        &self.previous_connection_id
-    }
-
-    /// Getter for accessing the client identifier from this message.
-    pub fn client_id(&self) -> &ClientId {
-        &self.client_id
-    }
-
-    /// Getter for accessing the client state.
-    pub fn client_state(&self) -> &Option<AnyClientState> {
-        &self.client_state
-    }
-
-    /// Getter for accesing the whole counterparty of this message. Returns a `clone()`.
-    pub fn counterparty(&self) -> &Counterparty {
-        &self.counterparty
-    }
-
-    /// Getter for accessing the versions from this message. Returns a `clone()`.
-    pub fn counterparty_versions(&self) -> &Vec<Version> {
-        &self.counterparty_versions
-    }
-
-    /// Getter for accessing the proofs in this message.
-    pub fn proofs(&self) -> &Proofs {
-        &self.proofs
-    }
-
     /// Moves the given message into another one, and updates the `previous_connection_id` field.
+    #[cfg(test)]
     pub fn with_previous_connection_id(
         self,
         previous_connection_id: Option<ConnectionId>,
