@@ -11,6 +11,7 @@ use crate::ics24_host::identifier::{ChannelId, PortId};
 pub mod chan_open_init;
 pub mod chan_open_try;
 mod verify;
+
 #[derive(Clone, Debug)]
 pub struct ChannelResult {
     pub port_id: PortId,
