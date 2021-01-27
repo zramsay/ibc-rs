@@ -751,7 +751,7 @@ impl Link {
             b_side: ChannelSide::new(
                 b_chain,
                 a_connection.counterparty().client_id().clone(),
-                a_connection.counterparty().connection_id().unwrap().clone(),
+                a_connection.counterparty().connection_id().clone().unwrap(),
                 a_channel.counterparty().port_id.clone(),
                 b_channel_id,
             ),

@@ -46,18 +46,18 @@ impl MsgConnectionOpenTry {
     }
 
     /// Getter for accessing the client state.
-    pub fn client_state(&self) -> Option<AnyClientState> {
-        self.client_state.clone()
+    pub fn client_state(&self) -> &Option<AnyClientState> {
+        &self.client_state
     }
 
     /// Getter for accesing the whole counterparty of this message. Returns a `clone()`.
-    pub fn counterparty(&self) -> Counterparty {
-        self.counterparty.clone()
+    pub fn counterparty(&self) -> &Counterparty {
+        &self.counterparty
     }
 
     /// Getter for accessing the versions from this message. Returns a `clone()`.
-    pub fn counterparty_versions(&self) -> Vec<Version> {
-        self.counterparty_versions.clone()
+    pub fn counterparty_versions(&self) -> &Vec<Version> {
+        &self.counterparty_versions
     }
 
     /// Getter for accessing the proofs in this message.

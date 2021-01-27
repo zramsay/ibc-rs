@@ -13,7 +13,7 @@ use crate::Height;
 /// Entry point for verifying all proofs bundled in any ICS3 message.
 pub fn verify_proofs(
     ctx: &dyn ConnectionReader,
-    client_state: Option<AnyClientState>,
+    client_state: &Option<AnyClientState>,
     connection_end: &ConnectionEnd,
     expected_conn: &ConnectionEnd,
     proofs: &Proofs,
@@ -96,7 +96,7 @@ pub fn verify_connection_proof(
             proof_height,
             connection_end.counterparty().prefix(),
             proof,
-            &connection_end.counterparty().connection_id().unwrap(),
+            connection_end.counterparty().connection_id().as_ref().unwrap(),
             expected_conn,
         )
         .map_err(|_| Kind::InvalidProof)?)
@@ -112,7 +112,7 @@ pub fn verify_connection_proof(
 pub fn verify_client_proof(
     ctx: &dyn ConnectionReader,
     connection_end: &ConnectionEnd,
-    expected_client_state: AnyClientState,
+    expected_client_state: &AnyClientState,
     proof_height: Height,
     proof: &CommitmentProofBytes,
 ) -> Result<(), Error> {

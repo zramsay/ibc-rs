@@ -35,19 +35,24 @@ impl MsgChannelOpenTry {
     pub fn port_id(&self) -> &PortId {
         &self.port_id
     }
+
     pub fn previous_channel_id(&self) -> &Option<ChannelId> {
         &self.previous_channel_id
     }
+
     pub fn counterparty_version(&self) -> &String {
         &self.counterparty_version
     }
+
     pub fn channel(&self) -> &ChannelEnd {
         &self.channel
     }
+
     pub fn proofs(&self) -> &Proofs {
         &self.proofs
     }
 }
+
 impl Msg for MsgChannelOpenTry {
     type ValidationError = Error;
 

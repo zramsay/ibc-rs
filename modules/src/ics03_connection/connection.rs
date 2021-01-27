@@ -141,13 +141,13 @@ impl ConnectionEnd {
     }
 
     /// Getter for the list of versions in this connection end.
-    pub fn versions(&self) -> Vec<Version> {
-        self.versions.clone()
+    pub fn versions(&self) -> &Vec<Version> {
+        &self.versions
     }
 
-    /// Getter for the counterparty. Returns a `clone()`.
-    pub fn counterparty(&self) -> Counterparty {
-        self.counterparty.clone()
+    /// Getter for the counterparty.
+    pub fn counterparty(&self) -> &Counterparty {
+        &self.counterparty
     }
 
     /// TODO: Clean this up, probably not necessary.
@@ -232,8 +232,8 @@ impl Counterparty {
     }
 
     /// Getter for connection id.
-    pub fn connection_id(&self) -> Option<&ConnectionId> {
-        self.connection_id.as_ref()
+    pub fn connection_id(&self) -> &Option<ConnectionId> {
+        &self.connection_id
     }
 
     pub fn prefix(&self) -> &CommitmentPrefix {

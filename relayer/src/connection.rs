@@ -443,7 +443,7 @@ impl Connection {
                 .query_compatible_versions()
                 .map_err(|e| ConnectionError::QueryError(self.src_chain().id(), e))?
         } else {
-            src_connection.versions()
+            src_connection.versions().clone()
         };
 
         // Get signer

@@ -290,7 +290,7 @@ impl Runnable for QueryUnreceivedPacketsCmd {
                     "The channel ({}/{}) has no counterparty (channel state is {:?})",
                     opts.port_id,
                     opts.channel_id,
-                    *channel.state()
+                    channel.state()
                 ))
                 .exit()
             }
@@ -587,7 +587,7 @@ impl Runnable for QueryUnreceivedAcknowledgementCmd {
                     "The channel ({}/{}) has no counterparty (channel state is {:?})",
                     opts.port_id,
                     opts.channel_id,
-                    *channel.state()
+                    channel.state()
                 ))
                 .exit()
             }

@@ -47,12 +47,12 @@ pub(crate) fn process(
             Some(msg.connection_id().clone()), // Local connection id.
             ctx.commitment_prefix(),          // Local commitment prefix.
         ),
-        new_conn_end.versions(),
+        new_conn_end.versions().clone(),
         new_conn_end.delay_period,
     );
 
     // 2. Pass the details to the verification function.
-    verify_proofs(ctx, None, &new_conn_end, &expected_conn, msg.proofs())?;
+    verify_proofs(ctx, &None, &new_conn_end, &expected_conn, msg.proofs())?;
 
     output.log("success: connection verification passed");
 

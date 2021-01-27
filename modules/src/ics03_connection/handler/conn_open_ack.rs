@@ -59,7 +59,7 @@ pub(crate) fn process(
         Counterparty::new(
             // The counterparty is the local chain.
             new_conn_end.client_id().clone(), // The local client identifier.
-            msg.counterparty_connection_id().cloned(), // This chain's connection id as known on counterparty.
+            msg.counterparty_connection_id().clone(), // This chain's connection id as known on counterparty.
             ctx.commitment_prefix(),                   // Local commitment prefix.
         ),
         vec![msg.version().clone()],
@@ -144,7 +144,7 @@ mod tests {
             client_id.clone(),
             Counterparty::new(
                 client_id.clone(),
-                msg_ack.counterparty_connection_id().cloned(),
+                msg_ack.counterparty_connection_id().clone(),
                 CommitmentPrefix::from(b"ibc".to_vec()),
             ),
             vec![msg_ack.version().clone()],
@@ -161,7 +161,7 @@ mod tests {
         conn_end_prefix.set_state(State::Init);
         conn_end_prefix.set_counterparty(Counterparty::new(
             client_id.clone(),
-            msg_ack.counterparty_connection_id().cloned(),
+            msg_ack.counterparty_connection_id().clone(),
             CommitmentPrefix::from(vec![]), // incorrect field
         ));
 

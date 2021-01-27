@@ -116,12 +116,12 @@ impl ChannelEnd {
         self.state = s;
     }
 
-    pub fn state(&self) -> &State {
-        &self.state
+    pub fn state(&self) -> State {
+        self.state
     }
 
-    pub fn ordering(&self) -> &Order {
-        &self.ordering
+    pub fn ordering(&self) -> Order {
+        self.ordering
     }
 
     pub fn counterparty(&self) -> &Counterparty {
@@ -132,8 +132,8 @@ impl ChannelEnd {
         &self.connection_hops
     }
 
-    pub fn version(&self) -> String {
-        self.version.parse().unwrap()
+    pub fn version(&self) -> &String {
+        &self.version
     }
 
     pub fn validate_basic(&self) -> Result<(), Error> {
@@ -154,11 +154,11 @@ impl ChannelEnd {
     }
 
     /// Helper function to compare the order of this end with another order.
-    pub fn order_matches(&self, other: &Order) -> bool {
-        self.ordering.eq(other)
+    pub fn order_matches(&self, other: Order) -> bool {
+        self.ordering.eq(&other)
     }
-    #[allow(clippy::ptr_arg)]
-    pub fn connection_hops_matches(&self, other: &Vec<ConnectionId>) -> bool {
+
+    pub fn connection_hops_matches(&self, other: &[ConnectionId]) -> bool {
         self.connection_hops.eq(other)
     }
 
@@ -198,8 +198,8 @@ impl Counterparty {
         &self.port_id
     }
 
-    pub fn channel_id(&self) -> Option<&ChannelId> {
-        self.channel_id.as_ref()
+    pub fn channel_id(&self) -> &Option<ChannelId> {
+        &self.channel_id
     }
 
     pub fn validate_basic(&self) -> Result<(), Error> {
@@ -213,18 +213,20 @@ impl TryFrom<RawCounterparty> for Counterparty {
     type Error = anomaly::Error<Kind>;
 
     fn try_from(value: RawCounterparty) -> Result<Self, Self::Error> {
-        let channel_id = Some(value.channel_id)
-            .filter(|x| !x.is_empty())
-            .map(|v| FromStr::from_str(v.as_str()))
-            .transpose()
-            .map_err(|e| Kind::IdentifierError.context(e))?;
-        Ok(Counterparty::new(
-            value
-                .port_id
+        let channel_id = if value.channel_id.is_empty() {
+            None
+        } else {
+            let channel_id = value
+                .channel_id
                 .parse()
-                .map_err(|e| Kind::IdentifierError.context(e))?,
-            channel_id,
-        ))
+                .map_err(|e| Kind::IdentifierError.context(e))?;
+            Some(channel_id)
+        };
+        let port_id = value
+            .port_id
+            .parse()
+            .map_err(|e| Kind::IdentifierError.context(e))?;
+        Ok(Counterparty::new(port_id, channel_id))
     }
 }
 
@@ -286,7 +288,7 @@ impl FromStr for Order {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
 pub enum State {
     Uninitialized = 0,
     Init = 1,

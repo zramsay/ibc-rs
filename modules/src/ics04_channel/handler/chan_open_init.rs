@@ -35,10 +35,10 @@ pub(crate) fn process(
 
     // An IBC connection running on the local (host) chain should exist.
 
-    let connection_end = ctx.connection_end(&msg.channel().connection_hops()[0]);
+    let connection_id = &msg.channel().connection_hops()[0];
+    let connection_end = ctx.connection_end(connection_id);
 
-    let conn = connection_end
-        .ok_or_else(|| Kind::MissingConnection(msg.channel().connection_hops()[0].clone()))?;
+    let conn = connection_end.ok_or_else(|| Kind::MissingConnection(connection_id.clone()))?;
 
     let get_versions = conn.versions();
     let version = match get_versions.as_slice() {
@@ -47,7 +47,7 @@ pub(crate) fn process(
     };
 
     let channel_feature = msg.channel().ordering().as_string().to_string();
-    if !version.is_supported_feature(channel_feature) {
+    if !version.is_supported_feature(&channel_feature) {
         return Err(Kind::ChannelFeatureNotSuportedByConnection.into());
     }
 
@@ -58,10 +58,10 @@ pub(crate) fn process(
 
     let new_channel_end = ChannelEnd::new(
         State::Init,
-        *msg.channel().ordering(),
+        msg.channel().ordering(),
         msg.channel().counterparty().clone(),
         msg.channel().connection_hops().clone(),
-        msg.channel().version(),
+        msg.channel().version().clone(),
     );
 
     output.log("success: no channel found");

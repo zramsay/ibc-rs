@@ -47,8 +47,8 @@ pub(crate) fn process(
         None => Ok(ConnectionEnd::new(
             State::Init,
             msg.client_id().clone(),
-            msg.counterparty(),
-            msg.counterparty_versions(),
+            msg.counterparty().clone(),
+            msg.counterparty_versions().clone(),
             msg.delay_period,
         )),
     }?;
@@ -59,7 +59,7 @@ pub(crate) fn process(
         State::Init,
         msg.counterparty().client_id().clone(),
         Counterparty::new(msg.client_id().clone(), None, ctx.commitment_prefix()),
-        msg.counterparty_versions(),
+        msg.counterparty_versions().clone(),
         msg.delay_period,
     );
 
@@ -77,8 +77,11 @@ pub(crate) fn process(
 
     // Pick the version.
     new_connection_end.set_version(
-        ctx.pick_version(ctx.get_compatible_versions(), msg.counterparty_versions())
-            .ok_or(Kind::NoCommonVersion)?,
+        ctx.pick_version(
+            &ctx.get_compatible_versions(),
+            msg.counterparty_versions(),
+        )
+        .ok_or(Kind::NoCommonVersion)?,
     );
 
     output.log("success: connection verification passed");

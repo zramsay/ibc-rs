@@ -18,8 +18,8 @@ pub struct Version {
 
 impl Version {
     /// Checks whether or not the given feature is supported in this versin
-    pub fn is_supported_feature(&self, feature: String) -> bool {
-        self.features.contains(&feature)
+    pub fn is_supported_feature(&self, feature: &String) -> bool {
+        self.features.contains(feature)
     }
 }
 
@@ -72,24 +72,24 @@ pub fn get_compatible_versions() -> Vec<Version> {
 
 /// Selects a version from the intersection of locally supported and counterparty versions.
 pub fn pick_version(
-    supported_versions: Vec<Version>,
-    counterparty_versions: Vec<Version>,
+    supported_versions: &Vec<Version>,
+    counterparty_versions: &Vec<Version>,
 ) -> Option<Version> {
     let mut intersection: Vec<Version> = vec![];
-    for s in supported_versions.iter() {
-        for c in counterparty_versions.iter() {
+    for s in supported_versions {
+        for c in counterparty_versions {
             if c.identifier != s.identifier {
                 continue;
             }
             // TODO - perform feature intersection and error if empty
-            intersection.append(&mut vec![s.clone()]);
+            intersection.push(s.clone());
         }
     }
     intersection.sort_by(|a, b| a.identifier.cmp(&b.identifier));
     if intersection.is_empty() {
         return None;
     }
-    Some(intersection[0].clone())
+    Some(intersection.pop().unwrap())
 }
 
 #[cfg(test)]
@@ -271,7 +271,7 @@ mod tests {
         ];
 
         for test in tests {
-            let version = pick_version(test.supported, test.counterparty);
+            let version = pick_version(&test.supported, &test.counterparty);
 
             assert_eq!(
                 test.want_pass,

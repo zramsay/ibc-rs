@@ -19,32 +19,30 @@ pub(crate) fn process(
 ) -> HandlerResult<ChannelResult, Error> {
     let mut output = HandlerOutput::builder();
 
-    let channel_id;
-
     // Unwrap the old channel end (if any) and validate it against the message.
 
     let mut new_channel_end = match msg.previous_channel_id() {
-        Some(prev_id) => {
+        Some(prev_channel_id) => {
+            let port_channel_id = (msg.port_id().clone(), prev_channel_id.clone());
             let old_channel_end = ctx
-                .channel_end(&(msg.port_id().clone(), prev_id.clone()))
-                .ok_or_else(|| Kind::ChannelNotFound.context(prev_id.to_string()))?;
+                .channel_end(&port_channel_id)
+                .ok_or_else(|| Kind::ChannelNotFound.context(prev_channel_id.to_string()))?;
 
-            channel_id = Some(prev_id.clone());
             // Validate that existing channel end matches with the one we're trying to establish.
 
             if old_channel_end.state_matches(&State::Init)
-                && old_channel_end.order_matches(&msg.channel.ordering())
-                && old_channel_end.connection_hops_matches(&msg.channel.connection_hops())
+                && old_channel_end.order_matches(msg.channel.ordering())
+                && old_channel_end.connection_hops_matches(msg.channel.connection_hops())
                 && old_channel_end.counterparty_matches(msg.channel.counterparty())
                // && old_channel_end.version_matches(&msg.counterparty_version().clone())
-               && old_channel_end.version_matches(&msg.channel.version())
+               && old_channel_end.version_matches(msg.channel.version())
             {
                 // A ChannelEnd already exists and all validation passed.
-                Ok(old_channel_end)
+                old_channel_end
             } else {
                 // A ConnectionEnd already exists and validation failed.
-                Err(Into::<Error>::into(
-                    Kind::ChannelMismatch(prev_id.clone()).context(
+                return Err(Into::<Error>::into(
+                    Kind::ChannelMismatch(prev_channel_id.clone()).context(
                         old_channel_end
                             .counterparty()
                             .channel_id()
@@ -52,23 +50,19 @@ pub(crate) fn process(
                             .unwrap()
                             .to_string(),
                     ),
-                ))
+                ));
             }
         }
         // No channel id is supplied to  create a new channel end. Note: the id is assigned
         // by the ChannelKeeper.
-        None => {
-            channel_id = None;
-
-            Ok(ChannelEnd::new(
-                State::Init,
-                *msg.channel.ordering(),
-                msg.channel.counterparty().clone(),
-                msg.channel.connection_hops().clone(),
-                msg.counterparty_version().clone(),
-            ))
-        }
-    }?;
+        None => ChannelEnd::new(
+            State::Init,
+            msg.channel.ordering(),
+            msg.channel.counterparty().clone(),
+            msg.channel.connection_hops().clone(),
+            msg.counterparty_version().clone(),
+        ),
+    };
 
     // An IBC connection running on the local (host) chain should exist.
 
@@ -76,38 +70,38 @@ pub(crate) fn process(
         return Err(Kind::InvalidConnectionHopsLength.into());
     }
 
-    let connection_end = ctx.connection_end(&msg.channel().connection_hops()[0]);
+    let connection_id = &msg.channel().connection_hops()[0];
+    let connection_end = ctx
+        .connection_end(connection_id)
+        .ok_or_else(|| Kind::MissingConnection(connection_id.clone()))?;
 
-    let conn = connection_end
-        .ok_or_else(|| Kind::MissingConnection(msg.channel().connection_hops()[0].clone()))?;
-
-    if !conn.state_matches(&ConnectionState::Open) {
-        return Err(ConnectionNotOpen(msg.channel.connection_hops()[0].clone()).into());
+    if !connection_end.state_matches(&ConnectionState::Open) {
+        return Err(ConnectionNotOpen(connection_id.clone()).into());
     }
 
-    let get_versions = conn.versions();
+    let get_versions = connection_end.versions();
     let version = match get_versions.as_slice() {
         [version] => version,
         _ => return Err(Kind::InvalidVersionLengthConnection.into()),
     };
 
     let channel_feature = msg.channel().ordering().as_string().to_string();
-    if !version.is_supported_feature(channel_feature) {
+    if !version.is_supported_feature(&channel_feature) {
         return Err(Kind::ChannelFeatureNotSuportedByConnection.into());
     }
 
     //Channel capabilities
-    let cap = ctx.port_capability(&msg.port_id().clone());
+    let cap = ctx.port_capability(msg.port_id());
     let channel_cap = match cap {
         Some(key) => {
-            if !ctx.capability_authentification(&msg.port_id().clone(), &key) {
-                Err(Kind::InvalidPortCapability)
+            if !ctx.capability_authentification(msg.port_id(), &key) {
+                return Err(Kind::InvalidPortCapability.into());
             } else {
-                Ok(key)
+                key
             }
         }
-        None => Err(Kind::NoPortCapability),
-    }?;
+        None => return Err(Kind::NoPortCapability.into()),
+    };
 
     if msg.channel().version().is_empty() {
         return Err(Kind::InvalidVersion.into());
@@ -118,22 +112,23 @@ pub(crate) fn process(
 
     let expected_counterparty = Counterparty::new(msg.port_id().clone(), None);
 
-    let counterparty = conn.counterparty();
-    let ccid = counterparty.connection_id().ok_or_else(|| {
-        Kind::UndefinedConnectionCounterparty(msg.channel().connection_hops()[0].clone())
-    })?;
+    let counterparty = connection_end.counterparty();
+    let counterparty_connection_id = counterparty
+        .connection_id()
+        .clone()
+        .ok_or_else(|| Kind::UndefinedConnectionCounterparty(connection_id.clone()))?;
 
-    let expected_connection_hops = vec![ccid.clone()];
+    let expected_connection_hops = vec![counterparty_connection_id];
 
     let expected_channel_end = ChannelEnd::new(
         State::Init,
-        *msg.channel.ordering(),
+        msg.channel.ordering(),
         expected_counterparty,
         expected_connection_hops,
         msg.counterparty_version().clone(),
     );
 
-    verify_proofs(ctx, &new_channel_end, &expected_channel_end, &msg.proofs())
+    verify_proofs(ctx, &new_channel_end, &expected_channel_end, msg.proofs())
         .map_err(|e| Kind::FailedChanneOpenTryVerification.context(e))?;
 
     output.log("success: channel open try ");
@@ -144,7 +139,7 @@ pub(crate) fn process(
     let result = ChannelResult {
         port_id: msg.port_id().clone(),
         channel_cap,
-        channel_id,
+        channel_id: msg.previous_channel_id().clone(),
         channel_end: new_channel_end,
     };
 
@@ -248,17 +243,16 @@ mod tests {
 
         let init_chan_end = ChannelEnd::new(
             State::Init,
-            *msg_chan_try2.channel.ordering(),
+            msg_chan_try2.channel.ordering(),
             msg_chan_try2.channel.counterparty().clone(),
             connection_vec.clone(),
-            msg_chan_try2.channel.version(),
+            msg_chan_try2.channel.version().clone(),
         );
 
         let init_chan_end2 = ChannelEnd::new(
             State::Init,
-            *msg_chan_try2.channel.ordering(),
+            msg_chan_try2.channel.ordering(),
             msg_chan_try2.channel.counterparty().clone(),
-            //msg_chan_try.channel.connection_hops().clone(),
             connection_vec,
             msg_chan_try2.counterparty_version().clone(),
         );
@@ -269,10 +263,10 @@ mod tests {
 
         let init_chan_end3 = ChannelEnd::new(
             State::Init,
-            *msg_chan_try2.channel.ordering(),
+            msg_chan_try2.channel.ordering(),
             msg_chan_try2.channel.counterparty().clone(),
             connection_vec3,
-            msg_chan_try2.channel().version(),
+            msg_chan_try2.channel().version().clone(),
         );
 
         let client_consensus_state_height = 10;

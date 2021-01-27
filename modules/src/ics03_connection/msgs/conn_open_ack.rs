@@ -36,13 +36,13 @@ impl MsgConnectionOpenAck {
     }
 
     /// Getter for accessing the counterparty's connection identifier from this message.
-    pub fn counterparty_connection_id(&self) -> Option<&ConnectionId> {
-        self.counterparty_connection_id.as_ref()
+    pub fn counterparty_connection_id(&self) -> &Option<ConnectionId> {
+        &self.counterparty_connection_id
     }
 
     /// Getter for accessing the client state.
-    pub fn client_state(&self) -> Option<AnyClientState> {
-        self.client_state.clone()
+    pub fn client_state(&self) -> &Option<AnyClientState> {
+        &self.client_state
     }
 
     /// Getter for accessing (borrow) the proofs in this message.
