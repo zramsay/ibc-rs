@@ -100,9 +100,9 @@ pub(crate) fn process(
     channel_end.set_state(State::TryOpen);
 
     let result = ChannelResult {
-        port_id: msg.port_id().clone(),
+        port_id,
+        channel_id,
         channel_cap,
-        channel_id: msg.previous_channel_id().clone(),
         channel_end,
     };
 

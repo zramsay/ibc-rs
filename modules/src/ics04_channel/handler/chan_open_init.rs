@@ -33,8 +33,8 @@ pub(crate) fn process(
     let result = ChannelResult {
         port_id,
         channel_id: None,
-        channel_end,
         channel_cap,
+        channel_end,
     };
 
     let event_attributes = Attributes {
