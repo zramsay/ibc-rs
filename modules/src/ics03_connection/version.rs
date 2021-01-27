@@ -18,8 +18,8 @@ pub struct Version {
 
 impl Version {
     /// Checks whether or not the given feature is supported in this versin
-    pub fn is_supported_feature(&self, feature: &String) -> bool {
-        self.features.contains(feature)
+    pub fn is_supported_feature(&self, feature: String) -> bool {
+        self.features.contains(&feature)
     }
 }
 
@@ -72,8 +72,8 @@ pub fn get_compatible_versions() -> Vec<Version> {
 
 /// Selects a version from the intersection of locally supported and counterparty versions.
 pub fn pick_version(
-    supported_versions: &Vec<Version>,
-    counterparty_versions: &Vec<Version>,
+    supported_versions: &[Version],
+    counterparty_versions: &[Version],
 ) -> Option<Version> {
     let mut intersection: Vec<Version> = vec![];
     for s in supported_versions {

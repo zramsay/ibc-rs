@@ -64,8 +64,8 @@ pub(crate) fn process(
         Counterparty::new(
             // The counterparty is the local chain.
             connection_end.client_id().clone(), // The local client identifier.
-            counterparty_connection_id.clone(), // This chain's connection id as known on counterparty.
-            ctx.commitment_prefix(),            // Local commitment prefix.
+            counterparty_connection_id, // This chain's connection id as known on counterparty.
+            ctx.commitment_prefix(),    // Local commitment prefix.
         ),
         vec![version.clone()],
         connection_end.delay_period,

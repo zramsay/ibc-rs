@@ -49,8 +49,8 @@ pub trait ConnectionReader {
     /// connection handshake protocol prefers.
     fn pick_version(
         &self,
-        supported_versions: &Vec<Version>,
-        counterparty_candidate_versions: &Vec<Version>,
+        supported_versions: &[Version],
+        counterparty_candidate_versions: &[Version],
     ) -> Option<Version> {
         pick_version(supported_versions, counterparty_candidate_versions)
     }

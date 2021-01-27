@@ -80,7 +80,7 @@ impl TryFrom<RawChannel> for ChannelEnd {
 impl From<ChannelEnd> for RawChannel {
     fn from(value: ChannelEnd) -> Self {
         RawChannel {
-            state: value.state.clone() as i32,
+            state: value.state as i32,
             ordering: value.ordering as i32,
             counterparty: Some(value.counterparty().clone().into()),
             connection_hops: value

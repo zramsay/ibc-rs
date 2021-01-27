@@ -31,7 +31,7 @@ pub(crate) fn verify_connection_and_capability(
 
     // Check that the version negotiated supports the channel's ordering
     let channel_feature = channel_end.ordering().as_string().to_string();
-    if !version.is_supported_feature(&channel_feature) {
+    if !version.is_supported_feature(channel_feature) {
         return Err(Kind::ChannelFeatureNotSuportedByConnection.into());
     }
 

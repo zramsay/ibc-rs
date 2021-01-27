@@ -29,7 +29,7 @@ pub(crate) fn process(
         verify::verify_connection_and_capability(ctx, &channel, &port_id)?;
 
     if !connection_end.state_matches(ConnectionState::Open) {
-        return Err(Kind::ConnectionNotOpen(connection_id.clone()).into());
+        return Err(Kind::ConnectionNotOpen(connection_id).into());
     }
 
     // Unwrap the old channel end (if any) and validate it against the message.
@@ -96,7 +96,7 @@ pub(crate) fn process(
         channel.ordering(),
         expected_counterparty,
         expected_connection_hops,
-        counterparty_version.clone(),
+        counterparty_version,
     );
 
     verify::verify_proofs(ctx, &channel_end, &expected_channel_end, &proofs)
