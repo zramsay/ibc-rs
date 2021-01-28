@@ -35,7 +35,6 @@ AsChainStore(chainStore) == chainStore <: ChainStoreType
 
 AsDatagram(dgr) == dgr <: DatagramType
 AsSetDatagrams(Dgrs) == Dgrs <: {DatagramType}
-AsSeqDatagrams(Dgrs) == Dgrs <: Seq(DatagramType)
 
 (********************** Common operator definitions ***********************)
 ChainIDs == {"chainA", "chainB"} 
