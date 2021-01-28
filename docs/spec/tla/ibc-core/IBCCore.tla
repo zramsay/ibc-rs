@@ -8,30 +8,27 @@ EXTENDS Integers, FiniteSets, Sequences, IBCCoreDefinitions
 
 CONSTANTS MaxHeight, \* maximal height of all the chains in the system
           MaxVersion, \* maximal connection version (we assume versions are integers) 
-          ClientDatagramsRelayer1, \* toggle generation of client datagrams for Relayer1 
-          ClientDatagramsRelayer2, \* toggle generation of client datagrams for Relayer2
-          ConnectionDatagramsRelayer1, \* toggle generation of connection datagrams for Relayer1
-          ConnectionDatagramsRelayer2 \* toggle generation of connection datagrams for Relayer2
+          ClientDatagramsRelayer, \* toggle generation of client datagrams for the relayer 
+          ConnectionDatagramsRelayer \* toggle generation of connection datagrams for the relayer
 
 VARIABLES chainAstore, \* chain store of ChainA
           chainBstore, \* chain store of ChainB
           incomingDatagramsChainA, \* set of (client, connection) datagrams incoming to ChainA
           incomingDatagramsChainB, \* set of (client, connection) datagrams incoming to ChainB
-          relayer1Heights, \* the client heights of Relayer1
-          relayer2Heights, \* the client heights of Relayer2
-          outgoingDatagrams, \* sets of (client, connection) datagrams outgoing of the relayers
+          relayerHeights, \* the client heights of the relayer
+          outgoingDatagrams, \* sets of (client, connection) datagrams outgoing of the relayer
           historyChainA, \* history variables for ChainA
           historyChainB \* history variables for ChainB
           
 vars == <<chainAstore, chainBstore, 
           incomingDatagramsChainA, incomingDatagramsChainB,
-          relayer1Heights, relayer2Heights,
+          relayerHeights,
           outgoingDatagrams,
           historyChainA, historyChainB>>
           
 chainAvars == <<chainAstore, incomingDatagramsChainA, historyChainA>>
 chainBvars == <<chainBstore, incomingDatagramsChainB, historyChainB>>
-relayerVars == <<relayer1Heights, relayer2Heights, outgoingDatagrams>>
+relayerVars == <<relayerHeights, outgoingDatagrams>>
 Heights == 1..MaxHeight \* set of possible heights of the chains in the system                      
       
 
@@ -39,19 +36,11 @@ Heights == 1..MaxHeight \* set of possible heights of the chains in the system
  Instances of Relayer and Chain
  ***************************************************************************)
 
-\* We suppose there are two correct relayers in the system, Relayer1 and Relayer2
-\* Relayer1 -- Instance of ICS18Relayer.tla
-Relayer1 == INSTANCE ICS18Relayer
-            WITH GenerateClientDatagrams <- ClientDatagramsRelayer1,
-                 GenerateConnectionDatagrams <- ConnectionDatagramsRelayer1,
-                 relayerHeights <- relayer1Heights
+Relayer == INSTANCE ICS18Relayer
+            WITH GenerateClientDatagrams <- ClientDatagramsRelayer,
+                 GenerateConnectionDatagrams <- ConnectionDatagramsRelayer,
+                 relayerHeights <- relayerHeights
                  
-\* Relayer2 -- Instance of ICS18Relayer.tla      
-Relayer2 == INSTANCE ICS18Relayer
-            WITH GenerateClientDatagrams <- ClientDatagramsRelayer2,
-                 GenerateConnectionDatagrams <- ConnectionDatagramsRelayer2,
-                 relayerHeights <- relayer2Heights
-
 \* We suppose there are two chains that communicate, ChainA and ChainB
 \* ChainA -- Instance of Chain.tla
 ChainA == INSTANCE Chain
@@ -74,14 +63,9 @@ ChainB == INSTANCE Chain
 \* RelayerAction: either correct relayer takes a step, leaving the other 
 \* variables unchanged 
 RelayerAction ==
-    \/ /\ Relayer1!Next
+    \/ /\ Relayer!Next
        /\ UNCHANGED chainAvars
        /\ UNCHANGED chainBvars
-       /\ UNCHANGED relayer2Heights
-    \/ /\ Relayer2!Next  
-       /\ UNCHANGED chainAvars
-       /\ UNCHANGED chainBvars
-       /\ UNCHANGED relayer1Heights 
 
 \* ChainAction: either chain takes a step, leaving the other 
 \* variables unchanged       
@@ -101,7 +85,7 @@ SubmitDatagrams ==
     /\ incomingDatagramsChainA' = AsSetDatagrams(incomingDatagramsChainA \union outgoingDatagrams["chainA"])
     /\ incomingDatagramsChainB' = AsSetDatagrams(incomingDatagramsChainB \union outgoingDatagrams["chainB"])
     /\ outgoingDatagrams' = [chainID \in ChainIDs |-> AsSetDatagrams({})]
-    /\ UNCHANGED <<chainAstore, chainBstore, relayer1Heights, relayer2Heights>>
+    /\ UNCHANGED <<chainAstore, chainBstore, relayerHeights>>
     /\ UNCHANGED <<historyChainA, historyChainB>>
     
 (***************************************************************************
@@ -111,8 +95,7 @@ SubmitDatagrams ==
 Init ==
     /\ ChainA!Init
     /\ ChainB!Init
-    /\ Relayer1!Init
-    /\ Relayer2!Init
+    /\ Relayer!Init
     
 \* Next state action
 Next ==
@@ -127,8 +110,7 @@ Fairness ==
     /\ WF_vars(SubmitDatagrams)  
     /\ ChainA!Fairness
     /\ ChainB!Fairness
-    /\ Relayer1!Fairness
-    /\ Relayer2!Fairness
+    /\ Relayer!Fairness
 
 \* Specification formula
 Spec == Init /\ [][Next]_vars /\ Fairness
@@ -141,8 +123,7 @@ Spec == Init /\ [][Next]_vars /\ Fairness
 TypeOK ==
     /\ ChainA!TypeOK
     /\ ChainB!TypeOK
-    /\ Relayer1!TypeOK
-    /\ Relayer2!TypeOK
+    /\ Relayer!TypeOK
 
 (***************************************************************************
  Helper operators used in properties
@@ -218,8 +199,7 @@ ConnectionOpenInv ==
  ***************************************************************************)
 \* IBCInv invariant: conjunction of invariants  
 IBCInv == 
-    \* at least one relayer creates connection datagrams
-    /\ (ConnectionDatagramsRelayer1 \/ ConnectionDatagramsRelayer2)
+    /\ ConnectionDatagramsRelayer
          => /\ ConnectionInitInv
             /\ ConnectionTryOpenInv
             /\ ConnectionOpenInv 
@@ -286,10 +266,10 @@ ConnectionOpenSafety ==
 \* IBCSafety property: conjunction of safety properties 
 IBCSafety ==
     \* at least one relayer creates client datagrams
-    /\ (ClientDatagramsRelayer1 \/ ClientDatagramsRelayer2)
+    /\ ClientDatagramsRelayer
          => ClientUpdateSafety  
     \* at least one relayer creates connection datagrams
-    /\ (ConnectionDatagramsRelayer1 \/ ConnectionDatagramsRelayer2)
+    /\ ConnectionDatagramsRelayer
          => /\ ConnectionInitSafety
             /\ ConnectionTryOpenSafety
             /\ ConnectionOpenSafety 
@@ -345,11 +325,11 @@ ConnOpenInitDelivery ==
 \* IBCDelivery property: conjunction of delivery properties 
 IBCDelivery ==
     \* at least one relayer creates client datagrams
-    /\ (ClientDatagramsRelayer1 \/ ClientDatagramsRelayer2)
+    /\ ClientDatagramsRelayer
          => /\ CreateClientDelivery
             /\ ClientUpdateDelivery
     \* at least one relayer creates connection datagrams
-    /\ (ConnectionDatagramsRelayer1 \/ ConnectionDatagramsRelayer2)
+    /\ ConnectionDatagramsRelayer
          => ConnOpenInitDelivery 
                
 =============================================================================
