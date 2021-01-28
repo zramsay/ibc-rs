@@ -1,2 +1,4 @@
-IBCCore.out
+*.out
 states/
+x/
+detailed.log
