@@ -37,9 +37,8 @@ Heights == 1..MaxHeight \* set of possible heights of the chains in the system
  ***************************************************************************)
 
 Relayer == INSTANCE ICS18Relayer
-            WITH GenerateClientDatagrams <- GenerateClientDatagrams,
-                 GenerateConnectionDatagrams <- GenerateConnectionDatagrams,
-                 relayerHeights <- relayerHeights
+            WITH relayerHeights <- relayerHeights,
+                 outgoingDatagrams <- outgoingDatagrams
                  
 \* We suppose there are two chains that communicate, ChainA and ChainB
 \* ChainA -- Instance of Chain.tla

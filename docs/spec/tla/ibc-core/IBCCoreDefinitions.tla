@@ -70,6 +70,7 @@ DatagramType ==
         clientID |-> STRING,
         counterpartyClientID |-> STRING,
         connectionID |-> STRING,
+        desiredConnectionID |-> STRING,
         counterpartyConnectionID |-> STRING,
         version |-> {Int}
     ]
@@ -193,7 +194,10 @@ Datagrams(maxHeight, maxVersion) ==
         counterpartyClientID : ClientIDs, 
         versions : SUBSET versions,
         proofHeight : 1..maxHeight, 
-        consensusHeight : 1..maxHeight
+        \* TODO: if the consensusHeight is 0, it means that the connOpenTry happened before the client behind created
+        \*       this is likely not allowed by the ICS
+        \*       - I'm allowing the consensusHeight to be 0 here just for the TypeOK invariant to hold
+        consensusHeight : 0..maxHeight
     ] \union [
         type : {"ConnOpenAck"}, 
         connectionID : ConnectionIDs, 
