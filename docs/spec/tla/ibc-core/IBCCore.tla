@@ -8,8 +8,8 @@ EXTENDS Integers, FiniteSets, Sequences, IBCCoreDefinitions
 
 CONSTANTS MaxHeight, \* maximal height of all the chains in the system
           MaxVersion, \* maximal connection version (we assume versions are integers) 
-          ClientDatagramsRelayer, \* toggle generation of client datagrams for the relayer 
-          ConnectionDatagramsRelayer \* toggle generation of connection datagrams for the relayer
+          GenerateClientDatagrams, \* toggle generation of client datagrams for the relayer 
+          GenerateConnectionDatagrams \* toggle generation of connection datagrams for the relayer
 
 VARIABLES chainAstore, \* chain store of ChainA
           chainBstore, \* chain store of ChainB
@@ -37,8 +37,8 @@ Heights == 1..MaxHeight \* set of possible heights of the chains in the system
  ***************************************************************************)
 
 Relayer == INSTANCE ICS18Relayer
-            WITH GenerateClientDatagrams <- ClientDatagramsRelayer,
-                 GenerateConnectionDatagrams <- ConnectionDatagramsRelayer,
+            WITH GenerateClientDatagrams <- GenerateClientDatagrams,
+                 GenerateConnectionDatagrams <- GenerateConnectionDatagrams,
                  relayerHeights <- relayerHeights
                  
 \* We suppose there are two chains that communicate, ChainA and ChainB
@@ -199,7 +199,7 @@ ConnectionOpenInv ==
  ***************************************************************************)
 \* IBCInv invariant: conjunction of invariants  
 IBCInv == 
-    /\ ConnectionDatagramsRelayer
+    /\ GenerateConnectionDatagrams
          => /\ ConnectionInitInv
             /\ ConnectionTryOpenInv
             /\ ConnectionOpenInv 
@@ -266,10 +266,10 @@ ConnectionOpenSafety ==
 \* IBCSafety property: conjunction of safety properties 
 IBCSafety ==
     \* at least one relayer creates client datagrams
-    /\ ClientDatagramsRelayer
+    /\ GenerateClientDatagrams
          => ClientUpdateSafety  
     \* at least one relayer creates connection datagrams
-    /\ ConnectionDatagramsRelayer
+    /\ GenerateConnectionDatagrams
          => /\ ConnectionInitSafety
             /\ ConnectionTryOpenSafety
             /\ ConnectionOpenSafety 
@@ -325,11 +325,11 @@ ConnOpenInitDelivery ==
 \* IBCDelivery property: conjunction of delivery properties 
 IBCDelivery ==
     \* at least one relayer creates client datagrams
-    /\ ClientDatagramsRelayer
+    /\ GenerateClientDatagrams
          => /\ CreateClientDelivery
             /\ ClientUpdateDelivery
     \* at least one relayer creates connection datagrams
-    /\ ConnectionDatagramsRelayer
+    /\ GenerateConnectionDatagrams
          => ConnOpenInitDelivery 
                
 =============================================================================
