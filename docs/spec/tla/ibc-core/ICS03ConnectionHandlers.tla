@@ -29,8 +29,7 @@ HandleConnOpenInit(chainID, chain, datagrams) ==
              counterpartyConnectionID |-> connOpenInitDgr.counterpartyConnectionID,
              clientID |-> connOpenInitDgr.clientID,
              counterpartyClientID |-> connOpenInitDgr.counterpartyClientID,
-             versions |-> chain.connectionEnd.versions,
-             channelEnd |-> chain.connectionEnd.channelEnd 
+             versions |-> chain.connectionEnd.versions
          ]) IN 
          LET connOpenInitChain == AsChainStore([
              chain EXCEPT !.connectionEnd = connOpenInitConnectionEnd
@@ -77,8 +76,7 @@ HandleConnOpenTry(chainID, chain, datagrams) ==
                 counterpartyConnectionID |-> connOpenTryDgr.counterpartyConnectionID,
                 clientID |-> connOpenTryDgr.clientID,
                 counterpartyClientID |-> connOpenTryDgr.counterpartyClientID,
-                versions |-> PickVersion(versionIntersection),
-                channelEnd |-> chain.connectionEnd.channelEnd 
+                versions |-> PickVersion(versionIntersection)
           ]) IN 
               LET connOpenTryChain == AsChainStore([
                   chain EXCEPT !.connectionEnd = connOpenTryConnectionEnd

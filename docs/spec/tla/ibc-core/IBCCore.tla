@@ -7,48 +7,31 @@
 EXTENDS Integers, FiniteSets, Sequences, IBCCoreDefinitions
 
 CONSTANTS MaxHeight, \* maximal height of all the chains in the system
-          MaxVersion, \* maximal connection / channel version (we assume versions are integers) 
-          MaxPacketSeq, \* maximal packet sequence number
+          MaxVersion, \* maximal connection version (we assume versions are integers) 
           ClientDatagramsRelayer1, \* toggle generation of client datagrams for Relayer1 
           ClientDatagramsRelayer2, \* toggle generation of client datagrams for Relayer2
           ConnectionDatagramsRelayer1, \* toggle generation of connection datagrams for Relayer1
-          ConnectionDatagramsRelayer2, \* toggle generation of connection datagrams for Relayer2
-          ChannelDatagramsRelayer1, \* toggle generation of channel datagrams for Relayer1
-          ChannelDatagramsRelayer2, \* toggle generation of channel datagrams for Relayer2
-          ChannelOrdering \* indicate whether the channels are ordered or unordered
+          ConnectionDatagramsRelayer2 \* toggle generation of connection datagrams for Relayer2
 
 VARIABLES chainAstore, \* chain store of ChainA
           chainBstore, \* chain store of ChainB
-          incomingDatagramsChainA, \* set of (client, connection, channel) datagrams incoming to ChainA
-          incomingDatagramsChainB, \* set of (client, connection, channel) datagrams incoming to ChainB
-          incomingPacketDatagramsChainA, \* sequence of packet datagrams incoming to ChainA
-          incomingPacketDatagramsChainB, \* sequence of packet datagrams incoming to ChainB
+          incomingDatagramsChainA, \* set of (client, connection) datagrams incoming to ChainA
+          incomingDatagramsChainB, \* set of (client, connection) datagrams incoming to ChainB
           relayer1Heights, \* the client heights of Relayer1
           relayer2Heights, \* the client heights of Relayer2
-          outgoingDatagrams, \* sets of (client, connection, channel) datagrams outgoing of the relayers
-          outgoingPacketDatagrams, \* sequences of packet datagrams outgoing of the relayers
-          closeChannelA, \* flag that triggers closing of the channel end at ChainA
-          closeChannelB, \* flag that triggers closing of the channel end at ChainB
+          outgoingDatagrams, \* sets of (client, connection) datagrams outgoing of the relayers
           historyChainA, \* history variables for ChainA
-          historyChainB, \* history variables for ChainB
-          packetLog, \* packet log 
-          appPacketSeqChainA, \* packet sequence number from the application on ChainA
-          appPacketSeqChainB \* packet sequence number from the application on ChainB
+          historyChainB \* history variables for ChainB
           
 vars == <<chainAstore, chainBstore, 
           incomingDatagramsChainA, incomingDatagramsChainB,
-          incomingPacketDatagramsChainA, incomingPacketDatagramsChainB,
           relayer1Heights, relayer2Heights,
           outgoingDatagrams,
-          outgoingPacketDatagrams,
-          closeChannelA, closeChannelB, 
-          historyChainA, historyChainB,
-          packetLog,
-          appPacketSeqChainA, appPacketSeqChainB>>
+          historyChainA, historyChainB>>
           
-chainAvars == <<chainAstore, incomingDatagramsChainA, incomingPacketDatagramsChainA, historyChainA, appPacketSeqChainA>>
-chainBvars == <<chainBstore, incomingDatagramsChainB, incomingPacketDatagramsChainB, historyChainB, appPacketSeqChainB>>
-relayerVars == <<relayer1Heights, relayer2Heights, outgoingDatagrams, outgoingPacketDatagrams>>
+chainAvars == <<chainAstore, incomingDatagramsChainA, historyChainA>>
+chainBvars == <<chainBstore, incomingDatagramsChainB, historyChainB>>
+relayerVars == <<relayer1Heights, relayer2Heights, outgoingDatagrams>>
 Heights == 1..MaxHeight \* set of possible heights of the chains in the system                      
       
 
@@ -61,14 +44,12 @@ Heights == 1..MaxHeight \* set of possible heights of the chains in the system
 Relayer1 == INSTANCE ICS18Relayer
             WITH GenerateClientDatagrams <- ClientDatagramsRelayer1,
                  GenerateConnectionDatagrams <- ConnectionDatagramsRelayer1,
-                 GenerateChannelDatagrams <- ChannelDatagramsRelayer1,
                  relayerHeights <- relayer1Heights
                  
 \* Relayer2 -- Instance of ICS18Relayer.tla      
 Relayer2 == INSTANCE ICS18Relayer
             WITH GenerateClientDatagrams <- ClientDatagramsRelayer2,
                  GenerateConnectionDatagrams <- ConnectionDatagramsRelayer2,
-                 GenerateChannelDatagrams <- ChannelDatagramsRelayer2,
                  relayerHeights <- relayer2Heights
 
 \* We suppose there are two chains that communicate, ChainA and ChainB
@@ -77,18 +58,14 @@ ChainA == INSTANCE Chain
           WITH ChainID <- "chainA",
                chainStore <- chainAstore,
                incomingDatagrams <- incomingDatagramsChainA,
-               incomingPacketDatagrams <- incomingPacketDatagramsChainA,
-               history <- historyChainA,
-               appPacketSeq <- appPacketSeqChainA
+               history <- historyChainA
 
 \* ChainB -- Instance of Chain.tla 
 ChainB == INSTANCE Chain
           WITH ChainID <- "chainB",
                chainStore <- chainBstore,
                incomingDatagrams <- incomingDatagramsChainB,
-               incomingPacketDatagrams <- incomingPacketDatagramsChainB,
-               history <- historyChainB,
-               appPacketSeq <- appPacketSeqChainB
+               history <- historyChainB
 
 (***************************************************************************
  Component actions
@@ -101,12 +78,10 @@ RelayerAction ==
        /\ UNCHANGED chainAvars
        /\ UNCHANGED chainBvars
        /\ UNCHANGED relayer2Heights
-       /\ UNCHANGED <<closeChannelA, closeChannelB>>
     \/ /\ Relayer2!Next  
        /\ UNCHANGED chainAvars
        /\ UNCHANGED chainBvars
        /\ UNCHANGED relayer1Heights 
-       /\ UNCHANGED <<closeChannelA, closeChannelB>>
 
 \* ChainAction: either chain takes a step, leaving the other 
 \* variables unchanged       
@@ -114,11 +89,9 @@ ChainAction ==
     \/ /\ ChainA!Next
        /\ UNCHANGED chainBvars
        /\ UNCHANGED relayerVars
-       /\ UNCHANGED <<closeChannelA, closeChannelB>>
     \/ /\ ChainB!Next  
        /\ UNCHANGED chainAvars
        /\ UNCHANGED relayerVars  
-       /\ UNCHANGED <<closeChannelA, closeChannelB>>
 
 (***************************************************************************
  IBCCore Environment actions
@@ -128,41 +101,9 @@ SubmitDatagrams ==
     /\ incomingDatagramsChainA' = AsSetDatagrams(incomingDatagramsChainA \union outgoingDatagrams["chainA"])
     /\ incomingDatagramsChainB' = AsSetDatagrams(incomingDatagramsChainB \union outgoingDatagrams["chainB"])
     /\ outgoingDatagrams' = [chainID \in ChainIDs |-> AsSetDatagrams({})]
-    /\ incomingPacketDatagramsChainA' = AsSeqPacketDatagrams(incomingPacketDatagramsChainA 
-                                                             \o
-                                                             outgoingPacketDatagrams["chainA"]) 
-    /\ incomingPacketDatagramsChainB' = AsSeqPacketDatagrams(incomingPacketDatagramsChainB
-                                                             \o
-                                                             outgoingPacketDatagrams["chainB"])
-    /\ outgoingPacketDatagrams' = [chainID \in ChainIDs |-> AsSeqPacketDatagrams(<<>>)]                                                          
     /\ UNCHANGED <<chainAstore, chainBstore, relayer1Heights, relayer2Heights>>
-    /\ UNCHANGED <<closeChannelA, closeChannelB>>
     /\ UNCHANGED <<historyChainA, historyChainB>>
-    /\ UNCHANGED <<packetLog, appPacketSeqChainA, appPacketSeqChainB>>
     
-\* Non-deterministically set channel closing flags
-CloseChannels ==
-    \/ /\ closeChannelA = FALSE
-       /\ closeChannelA' \in BOOLEAN
-       /\ UNCHANGED <<chainAstore, chainBstore, relayer1Heights, relayer2Heights>>
-       /\ UNCHANGED <<incomingDatagramsChainA, incomingDatagramsChainB, outgoingDatagrams>>
-       /\ UNCHANGED closeChannelB
-       /\ UNCHANGED <<historyChainA, historyChainB>>
-       /\ UNCHANGED <<packetLog, appPacketSeqChainA, appPacketSeqChainB>>
-       /\ UNCHANGED <<incomingPacketDatagramsChainA, incomingPacketDatagramsChainB, outgoingPacketDatagrams>>
-    \/ /\ closeChannelB = FALSE
-       /\ closeChannelB' \in BOOLEAN
-       /\ UNCHANGED <<chainAstore, chainBstore, relayer1Heights, relayer2Heights>>
-       /\ UNCHANGED <<incomingDatagramsChainA, incomingDatagramsChainB, outgoingDatagrams>>
-       /\ UNCHANGED closeChannelA
-       /\ UNCHANGED <<historyChainA, historyChainB>>
-       /\ UNCHANGED <<packetLog, appPacketSeqChainA, appPacketSeqChainB>>
-       /\ UNCHANGED <<incomingPacketDatagramsChainA, incomingPacketDatagramsChainB, outgoingPacketDatagrams>>
-    
-EnvironmentAction ==
-    \/ SubmitDatagrams
-    \/ CloseChannels
-        
 (***************************************************************************
  Specification
  ***************************************************************************)
@@ -172,15 +113,12 @@ Init ==
     /\ ChainB!Init
     /\ Relayer1!Init
     /\ Relayer2!Init
-    /\ closeChannelA = FALSE
-    /\ closeChannelB = FALSE
-    /\ packetLog = AsPacketLog(<<>>)
     
 \* Next state action
 Next ==
     \/ ChainAction
     \/ RelayerAction
-    \/ EnvironmentAction
+    \/ SubmitDatagrams
     \/ UNCHANGED vars
     
    
@@ -191,8 +129,6 @@ Fairness ==
     /\ ChainB!Fairness
     /\ Relayer1!Fairness
     /\ Relayer2!Fairness
-    /\ <>[]closeChannelA
-    /\ <>[]closeChannelB
 
 \* Specification formula
 Spec == Init /\ [][Next]_vars /\ Fairness
@@ -207,8 +143,6 @@ TypeOK ==
     /\ ChainB!TypeOK
     /\ Relayer1!TypeOK
     /\ Relayer2!TypeOK
-    /\ closeChannelA \in BOOLEAN
-    /\ closeChannelB \in BOOLEAN
 
 (***************************************************************************
  Helper operators used in properties
@@ -250,23 +184,6 @@ IsConnOpenInitInOutgoingDatagrams(chainID) ==
      counterpartyConnectionID |-> counterpartyConnID,
      counterpartyClientID |-> counterpartyClID] \in outgoingDatagrams[chainID]
             
-\* returns true if there is a "ChanOpenInit" datagram  
-\* in outgoing datagrams for chainID
-IsChanOpenInitInOutgoingDatagrams(chainID) ==
-    LET chanID == GetChannelID(chainID) IN
-    LET counterpartyChanID == GetCounterpartyChannelID(chainID) IN
-    [type |-> "ChanOpenInit", 
-     channelID |-> chanID, 
-     counterpartyChannelID |-> counterpartyChanID] \in outgoingDatagrams[chainID]
-
-\* returns true if there is a "ChanCloseInit" datagram  
-\* in outgoing datagrams for chainID
-IsChanCloseInitInOutgoingDatagrams(chainID) ==
-    LET chanID == GetChannelID(chainID) IN
-    [type |-> "ChanCloseInit", 
-     channelID |-> chanID] \in outgoingDatagrams[chainID]
-
-               
 ----------------------------------------------------------------------------
 (***************************************************************************
  Invariants & Properties
@@ -297,43 +214,6 @@ ConnectionOpenInv ==
                                   /\ ~IsConnectionTryOpen(GetChainByID("chainB")))
                                   
 (***************************************************************************
- Invariants: channel datagrams
- ***************************************************************************)    
-\* once chanInit is set to TRUE in the history variable, 
-\* the channel never goes to UNINIT         
-ChannelInitInv ==
-    /\ historyChainA.chanInit => ~IsChannelUninit(GetChainByID("chainA"))
-    /\ historyChainB.chanInit => ~IsChannelUninit(GetChainByID("chainB"))
-
-\* once chanTryOpen is set to TRUE in the history variable, 
-\* the channel never goes to UNINIT         
-ChannelTryOpenInv ==
-    /\ historyChainA.chanTryOpen => ~IsChannelUninit(GetChainByID("chainA"))
-    /\ historyChainB.chanTryOpen => ~IsChannelUninit(GetChainByID("chainB"))
-
-\* once chanOpen is set to TRUE in the history variable, 
-\* the channel never goes to UNINIT, INIT, or TRYOPEN         
-ChannelOpenInv ==
-    /\ historyChainA.chanOpen => (/\ ~IsChannelUninit(GetChainByID("chainA"))
-                                  /\ ~IsChannelInit(GetChainByID("chainA"))
-                                  /\ ~IsChannelTryOpen(GetChainByID("chainA")))
-    /\ historyChainB.chanOpen => (/\ ~IsChannelUninit(GetChainByID("chainB"))
-                                  /\ ~IsChannelInit(GetChainByID("chainB"))
-                                  /\ ~IsChannelTryOpen(GetChainByID("chainB")))
-
-\* once chanClosed is set to TRUE in the history variable, 
-\* the channel never goes to UNINIT, INIT, TRYOPEN, or OPEN    
-ChannelCloseInv ==
-    /\ historyChainA.chanClosed => (/\ ~IsChannelUninit(GetChainByID("chainA"))
-                                    /\ ~IsChannelInit(GetChainByID("chainA"))
-                                    /\ ~IsChannelTryOpen(GetChainByID("chainA"))
-                                    /\ ~IsChannelOpen(GetChainByID("chainA")))
-    /\ historyChainB.chanClosed => (/\ ~IsChannelUninit(GetChainByID("chainB"))
-                                    /\ ~IsChannelInit(GetChainByID("chainB"))
-                                    /\ ~IsChannelTryOpen(GetChainByID("chainB"))
-                                    /\ ~IsChannelOpen(GetChainByID("chainB")))
-    
-(***************************************************************************
  Invariant [IBCInv]
  ***************************************************************************)
 \* IBCInv invariant: conjunction of invariants  
@@ -343,14 +223,7 @@ IBCInv ==
          => /\ ConnectionInitInv
             /\ ConnectionTryOpenInv
             /\ ConnectionOpenInv 
-    \* at least one relayer creates channel datagrams
-    /\ (ChannelDatagramsRelayer1 \/ ChannelDatagramsRelayer2)
-         => /\ ChannelInitInv
-            /\ ChannelTryOpenInv
-            /\ ChannelOpenInv    
-            /\ ChannelCloseInv  
     
-
 (***************************************************************************
  Safety: client datagrams
  ***************************************************************************)    
@@ -407,55 +280,6 @@ ConnectionOpenSafety ==
               /\ ~IsConnectionTryOpen(GetChainByID(chainID))))
 
 (***************************************************************************
- Safety: channels datagrams
- ***************************************************************************)    
-              
-\* it ALWAYS holds that, for every chainID
-\*  - if 
-\*    * the channel end is in INIT
-\*  - then 
-\*    * it NEVER goes to UNINIT 
-ChannelInitSafety ==
-    [](\A chainID \in ChainIDs:
-        /\ IsChannelInit(GetChainByID(chainID))
-        => [](~IsChannelUninit(GetChainByID(chainID))))            
-
-\* it ALWAYS holds that, for every chainID
-\*  - if 
-\*    * the channel end is in TRYOPEN
-\*  - then 
-\*    * it NEVER goes to UNINIT 
-ChannelTryOpenSafety ==
-    [](\A chainID \in ChainIDs:
-        /\ IsChannelTryOpen(GetChainByID(chainID))
-        => [](~IsChannelUninit(GetChainByID(chainID))))
-
-\* it ALWAYS holds that, for every chainID
-\*  - if 
-\*    * the channel end is in OPEN
-\*  - then 
-\*    * it NEVER goes to UNINIT, INIT, or TRYOPEN              
-ChannelOpenSafety ==     
-    [](\A chainID \in ChainIDs:
-        /\ IsChannelOpen(GetChainByID(chainID))
-        => [](/\ ~IsChannelUninit(GetChainByID(chainID))
-              /\ ~IsChannelInit(GetChainByID(chainID))
-              /\ ~IsChannelTryOpen(GetChainByID(chainID))))
-              
-\* it ALWAYS holds that, for every chainID
-\*  - if 
-\*    * the channel end is in CLOSED
-\*  - then 
-\*    * it NEVER goes to UNINIT, INIT, TRYOPEN, or OPEN              
-ChannelCloseSafety ==     
-    [](\A chainID \in ChainIDs:
-        /\ IsChannelClosed(GetChainByID(chainID))
-        => [](/\ ~IsChannelUninit(GetChainByID(chainID))
-              /\ ~IsChannelInit(GetChainByID(chainID))
-              /\ ~IsChannelTryOpen(GetChainByID(chainID))
-              /\ ~IsChannelOpen(GetChainByID(chainID)))) 
-
-(***************************************************************************
  Safety [IBCSafety]:
     Bad datagrams are not used to update the chain stores 
  ***************************************************************************)
@@ -469,12 +293,6 @@ IBCSafety ==
          => /\ ConnectionInitSafety
             /\ ConnectionTryOpenSafety
             /\ ConnectionOpenSafety 
-    \* at least one relayer creates channel datagrams
-    /\ (ChannelDatagramsRelayer1 \/ ChannelDatagramsRelayer2)
-         => /\ ChannelInitSafety
-            /\ ChannelTryOpenSafety
-            /\ ChannelOpenSafety    
-            /\ ChannelCloseSafety  
 
 (***************************************************************************
  Liveness: Eventual delivery of client datagrams
@@ -516,31 +334,6 @@ ConnOpenInitDelivery ==
                 /\ IsConnectionOpen(GetChainByID(GetCounterpartyChainID(chainID))))))   
          
 (***************************************************************************
- Liveness: Eventual delivery of channel datagrams
- ***************************************************************************)
-\* it ALWAYS holds that, for every chainID
-\*  - if 
-\*      * EVENTUALLY a ChanOpenInit is sent to chainID
-\*  -  then 
-\*      * EVENTUALLY the channels at chainID and its counterparty are open
-ChanOpenInitDelivery ==
-    [](\A chainID \in ChainIDs : 
-       (<>IsChanOpenInitInOutgoingDatagrams(chainID) 
-          => <>(/\ IsChannelOpen(GetChainByID(chainID))
-                /\ IsChannelOpen(GetChainByID(GetCounterpartyChainID(chainID))))))   
-
-\* it ALWAYS holds that, for every chainID
-\*  - if 
-\*      * EVENTUALLY a ChanCloseInit is sent to chainID
-\*  -  then 
-\*      * EVENTUALLY the channels at chainID and its counterparty are closed
-ChanCloseInitDelivery ==
-    [](\A chainID \in ChainIDs : 
-       (<>IsChanCloseInitInOutgoingDatagrams(chainID) 
-          => <>(/\ IsChannelClosed(GetChainByID(chainID))
-                /\ IsChannelClosed(GetChainByID(GetCounterpartyChainID(chainID))))))   
- 
-(***************************************************************************
  Liveness [IBCDelivery]: 
     If ChainA sends a datagram to ChainB, then ChainB eventually receives 
     the datagram
@@ -558,10 +351,6 @@ IBCDelivery ==
     \* at least one relayer creates connection datagrams
     /\ (ConnectionDatagramsRelayer1 \/ ConnectionDatagramsRelayer2)
          => ConnOpenInitDelivery 
-    \* at least one relayer creates channel datagrams
-    /\ (ChannelDatagramsRelayer1 \/ ChannelDatagramsRelayer2)
-         => /\ ChanOpenInitDelivery
-            /\ ChanCloseInitDelivery
                
 =============================================================================
 \* Modification History
