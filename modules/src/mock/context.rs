@@ -533,7 +533,7 @@ impl ConnectionKeeper for MockContext {
 impl ClientReader for MockContext {
     fn client_type(&self, client_id: &ClientId) -> Option<ClientType> {
         match self.clients.get(client_id) {
-            Some(client_record) => client_record.client_type.into(),
+            Some(client_record) => Some(client_record.client_type),
             None => None,
         }
     }
@@ -547,10 +547,7 @@ impl ClientReader for MockContext {
 
     fn consensus_state(&self, client_id: &ClientId, height: Height) -> Option<AnyConsensusState> {
         match self.clients.get(client_id) {
-            Some(client_record) => match client_record.consensus_states.get(&height) {
-                Some(consensus_state) => Option::from(consensus_state.clone()),
-                None => None,
-            },
+            Some(client_record) => client_record.consensus_states.get(&height).cloned(),
             None => None,
         }
     }

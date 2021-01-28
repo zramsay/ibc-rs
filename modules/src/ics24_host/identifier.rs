@@ -132,7 +132,7 @@ impl ClientId {
     pub fn new(ctype: ClientType, counter: u64) -> Result<Self, ValidationError> {
         let prefix = Self::prefix(ctype);
         let id = format!("{}-{}", prefix, counter);
-        Self::from_str(id.as_str())
+        id.parse()
     }
 
     /// Get this identifier as a borrowed `&str`

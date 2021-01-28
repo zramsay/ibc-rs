@@ -66,6 +66,7 @@ impl ForeignClient {
 
         Ok(client)
     }
+
     /// Returns a handle to the chain hosting this client.
     pub fn dst_chain(&self) -> Box<dyn ChainHandle> {
         self.dst_chain.clone()
