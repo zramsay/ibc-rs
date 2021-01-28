@@ -105,35 +105,35 @@ impl RelayPath {
     }
 
     pub fn src_client_id(&self) -> &ClientId {
-        &self.channel.src_client_id()
+        self.channel.src_client_id()
     }
 
     pub fn dst_client_id(&self) -> &ClientId {
-        &self.channel.dst_client_id()
+        self.channel.dst_client_id()
     }
 
     pub fn src_connection_id(&self) -> &ConnectionId {
-        &self.channel.src_connection_id()
+        self.channel.src_connection_id()
     }
 
     pub fn dst_connection_id(&self) -> &ConnectionId {
-        &self.channel.dst_connection_id()
+        self.channel.dst_connection_id()
     }
 
     pub fn src_port_id(&self) -> &PortId {
-        &self.channel.src_port_id()
+        self.channel.src_port_id()
     }
 
     pub fn dst_port_id(&self) -> &PortId {
-        &self.channel.dst_port_id()
+        self.channel.dst_port_id()
     }
 
     pub fn src_channel_id(&self) -> &ChannelId {
-        &self.channel.src_channel_id()
+        self.channel.src_channel_id()
     }
 
     pub fn dst_channel_id(&self) -> &ChannelId {
-        &self.channel.dst_channel_id()
+        self.channel.dst_channel_id()
     }
 
     pub fn build_update_client_on_dst(&self, height: Height) -> Result<Vec<Any>, LinkError> {
