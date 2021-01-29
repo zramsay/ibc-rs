@@ -3,7 +3,6 @@
 //! "ADR 003: IBC protocol implementation" for more details.
 
 use crate::ics02_client::client_def::{AnyClientState, AnyConsensusState};
-use crate::ics02_client::client_type::ClientType;
 use crate::ics02_client::error::Error;
 use crate::ics02_client::handler::ClientResult::{self, Create, Update};
 use crate::ics24_host::identifier::ClientId;
@@ -11,7 +10,6 @@ use crate::Height;
 
 /// Defines the read-only part of ICS2 (client functions) context.
 pub trait ClientReader {
-    fn client_type(&self, client_id: &ClientId) -> Option<ClientType>;
     fn client_state(&self, client_id: &ClientId) -> Option<AnyClientState>;
     fn consensus_state(&self, client_id: &ClientId, height: Height) -> Option<AnyConsensusState>;
 
@@ -25,7 +23,6 @@ pub trait ClientKeeper {
     fn store_client_result(&mut self, handler_res: ClientResult) -> Result<(), Error> {
         match handler_res {
             Create(res) => {
-                self.store_client_type(res.client_id.clone(), res.client_state.client_type())?;
                 self.store_client_state(res.client_id.clone(), res.client_state.clone())?;
                 self.store_consensus_state(
                     res.client_id,
@@ -46,13 +43,6 @@ pub trait ClientKeeper {
             }
         }
     }
-
-    /// Called upon successful client creation
-    fn store_client_type(
-        &mut self,
-        client_id: ClientId,
-        client_type: ClientType,
-    ) -> Result<(), Error>;
 
     /// Called upon successful client creation and update
     fn store_client_state(

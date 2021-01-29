@@ -31,14 +31,6 @@ pub fn process(
         signer: _,
     } = msg;
 
-    // Read client type from the host chain store. The client should already exist.
-    let client_type = ctx
-        .client_type(&client_id)
-        .ok_or_else(|| Kind::ClientNotFound(client_id.clone()))?;
-
-    let client_def = AnyClient::from_client_type(client_type);
-
-    // Read client state from the host chain store.
     let client_state = ctx
         .client_state(&client_id)
         .ok_or_else(|| Kind::ClientNotFound(client_id.clone()))?;
@@ -50,6 +42,7 @@ pub fn process(
     // Use client_state to validate the new header against the latest consensus_state.
     // This function will return the new client_state (its latest_height changed) and a
     // consensus_state obtained from header. These will be later persisted by the keeper.
+    let client_def = AnyClient::from_client_type(client_state.client_type());
     let (new_client_state, new_consensus_state) = client_def
         .check_header_and_update_state(client_state, header)
         .map_err(|e| Kind::HeaderVerificationFailure.context(e.to_string()))?;

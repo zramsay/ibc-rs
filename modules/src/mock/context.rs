@@ -531,13 +531,6 @@ impl ConnectionKeeper for MockContext {
 }
 
 impl ClientReader for MockContext {
-    fn client_type(&self, client_id: &ClientId) -> Option<ClientType> {
-        match self.clients.get(client_id) {
-            Some(client_record) => Some(client_record.client_type),
-            None => None,
-        }
-    }
-
     fn client_state(&self, client_id: &ClientId) -> Option<AnyClientState> {
         match self.clients.get(client_id) {
             Some(client_record) => client_record.client_state.clone(),
@@ -558,27 +551,13 @@ impl ClientReader for MockContext {
 }
 
 impl ClientKeeper for MockContext {
-    fn store_client_type(
-        &mut self,
-        client_id: ClientId,
-        client_type: ClientType,
-    ) -> Result<(), ICS2Error> {
-        let mut client_record = self.clients.entry(client_id).or_insert(MockClientRecord {
-            client_type,
-            consensus_states: Default::default(),
-            client_state: Default::default(),
-        });
-
-        client_record.client_type = client_type;
-        Ok(())
-    }
-
     fn store_client_state(
         &mut self,
         client_id: ClientId,
         client_state: AnyClientState,
     ) -> Result<(), ICS2Error> {
         let mut client_record = self.clients.entry(client_id).or_insert(MockClientRecord {
+            // why not store `ClientType::Mock` here as in the method below?
             client_type: client_state.client_type(),
             consensus_states: Default::default(),
             client_state: Default::default(),
