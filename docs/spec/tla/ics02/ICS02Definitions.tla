@@ -2,8 +2,15 @@
 
 EXTENDS Integers, FiniteSets
 
-\* set of all datagrams
-\* Datagrams(ClientIds) == 
+(********************* TYPE ANNOTATIONS FOR APALACHE ***********************)
+\* operator for type annotations
+a <: b == a
+
+ClientType == [
+    clientId |-> Int,
+    height |-> Int
+]
+AsClients(clients) == clients <: {ClientType}
 
 \* set of all client data
 ClientData(ClientIds, Heights) == [

@@ -43,7 +43,7 @@ UpdateClientDatagram ==
  ***************************************************************************)
 
  Init ==
-    /\ clients = {}
+    /\ clients = AsClients({})
     /\ nextClientId = 1
 
 CreateClient ==

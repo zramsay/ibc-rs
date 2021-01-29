@@ -1,4 +1,4 @@
---------------------- MODULE MC_apalache ---------------------
+--------------------- MODULE IBCCore_apalache ---------------------
 
 GenerateClientDatagrams == TRUE
 MaxHeight == 5
