@@ -10,10 +10,10 @@ CONSTANT MaxHeight
 ASSUME MaxHeight > 0
 
 
-\* counter used to generate client identifiers
-VARIABLE nextClientId
 \* set of client data
 VARIABLE clients
+\* counter used to generate client identifiers
+VARIABLE nextClientId
 
 \* set of possible client identifiers
 ClientIds == 1..MaxClientId
@@ -43,24 +43,36 @@ UpdateClientDatagram ==
  ***************************************************************************)
 
  Init ==
-    /\ nextClientId = 1
     /\ clients = {}
+    /\ nextClientId = 1
 
-Update ==
-    /\ nextClientId <= MaxClientId
-    /\ nextClientId' = nextClientId + 1
-    /\ UNCHANGED <<clients>>
+CreateClient ==
+    /\ nextClientId < MaxClientId
+    /\ \E clientHeight \in Heights:
+        /\ clients' = clients \union
+                      {[clientId |-> nextClientId, height |-> clientHeight]}
+        /\ nextClientId' = nextClientId + 1
+ 
+\* UpdateClient ==
+\*     \E clientId \in ClientIds:
+\*         \E clientHeight \in Heights:
 
 Next ==
-    \/ Update
+    \/ CreateClient
+    \* \/ UpdateClient
     \/ UNCHANGED <<nextClientId, clients>>
 
 (***************************************************************************
  Invariants
  ***************************************************************************)
 
-TypeOK ==
+TypeOk ==
     /\ nextClientId \in ClientIds \union { MaxClientId + 1 }
     /\ clients \in Clients(ClientIds, Heights)
+
+\* the client identifiers created are smaller than `nextClientId`
+ClientIdsCreated ==
+    \A client \in clients:
+        client.clientId < nextClientId
 
 =============================================================================
