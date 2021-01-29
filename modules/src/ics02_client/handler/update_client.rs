@@ -37,6 +37,7 @@ pub fn process(
 
     let latest_height = client_state.latest_height();
     ctx.consensus_state(&client_id, latest_height)
+        // TODO: can this error ever happen?
         .ok_or_else(|| Kind::ConsensusStateNotFound(client_id.clone(), latest_height))?;
 
     // Use client_state to validate the new header against the latest consensus_state.
@@ -44,7 +45,7 @@ pub fn process(
     // consensus_state obtained from header. These will be later persisted by the keeper.
     let client_def = AnyClient::from_client_type(client_state.client_type());
     let (new_client_state, new_consensus_state) = client_def
-        .check_header_and_update_state(client_state, header)
+        .check_header_and_update_state(client_state.clone(), header)
         .map_err(|e| Kind::HeaderVerificationFailure.context(e.to_string()))?;
 
     let result = ClientResult::Update(Result {

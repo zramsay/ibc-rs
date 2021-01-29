@@ -10,8 +10,8 @@ use crate::Height;
 
 /// Defines the read-only part of ICS2 (client functions) context.
 pub trait ClientReader {
-    fn client_state(&self, client_id: &ClientId) -> Option<AnyClientState>;
-    fn consensus_state(&self, client_id: &ClientId, height: Height) -> Option<AnyConsensusState>;
+    fn client_state(&self, client_id: &ClientId) -> Option<&AnyClientState>;
+    fn consensus_state(&self, client_id: &ClientId, height: Height) -> Option<&AnyConsensusState>;
 
     /// Returns a natural number, counting how many clients have been created thus far.
     /// The value of this counter should increase only via method `ClientKeeper::increase_client_counter`.
@@ -23,20 +23,18 @@ pub trait ClientKeeper {
     fn store_client_result(&mut self, handler_res: ClientResult) -> Result<(), Error> {
         match handler_res {
             Create(res) => {
-                self.store_client_state(res.client_id.clone(), res.client_state.clone())?;
-                self.store_consensus_state(
+                self.store_client_and_consensus_state(
                     res.client_id,
-                    res.client_state.latest_height(),
+                    res.client_state,
                     res.consensus_state,
                 )?;
                 self.increase_client_counter();
                 Ok(())
             }
             Update(res) => {
-                self.store_client_state(res.client_id.clone(), res.client_state.clone())?;
-                self.store_consensus_state(
+                self.store_client_and_consensus_state(
                     res.client_id,
-                    res.client_state.latest_height(),
+                    res.client_state,
                     res.consensus_state,
                 )?;
                 Ok(())
@@ -45,17 +43,10 @@ pub trait ClientKeeper {
     }
 
     /// Called upon successful client creation and update
-    fn store_client_state(
+    fn store_client_and_consensus_state(
         &mut self,
         client_id: ClientId,
         client_state: AnyClientState,
-    ) -> Result<(), Error>;
-
-    /// Called upon successful client creation and update
-    fn store_consensus_state(
-        &mut self,
-        client_id: ClientId,
-        height: Height,
         consensus_state: AnyConsensusState,
     ) -> Result<(), Error>;
 

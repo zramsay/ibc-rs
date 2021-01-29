@@ -469,7 +469,7 @@ impl ConnectionReader for MockContext {
 
     fn client_state(&self, client_id: &ClientId) -> Option<AnyClientState> {
         // Forward method call to the ICS2 Client-specific method.
-        ClientReader::client_state(self, client_id)
+        ClientReader::client_state(self, client_id).cloned()
     }
 
     fn host_current_height(&self) -> Height {
@@ -491,7 +491,7 @@ impl ConnectionReader for MockContext {
         height: Height,
     ) -> Option<AnyConsensusState> {
         // Forward method call to the ICS2Client-specific method.
-        self.consensus_state(client_id, height)
+        self.consensus_state(client_id, height).cloned()
     }
 
     fn host_consensus_state(&self, height: Height) -> Option<AnyConsensusState> {
@@ -531,18 +531,18 @@ impl ConnectionKeeper for MockContext {
 }
 
 impl ClientReader for MockContext {
-    fn client_state(&self, client_id: &ClientId) -> Option<AnyClientState> {
-        match self.clients.get(client_id) {
-            Some(client_record) => client_record.client_state.clone(),
-            None => None,
-        }
+    fn client_state(&self, client_id: &ClientId) -> Option<&AnyClientState> {
+        self.clients
+            .get(client_id)
+            .map(|client_record| client_record.client_state.as_ref())
+            .flatten()
     }
 
-    fn consensus_state(&self, client_id: &ClientId, height: Height) -> Option<AnyConsensusState> {
-        match self.clients.get(client_id) {
-            Some(client_record) => client_record.consensus_states.get(&height).cloned(),
-            None => None,
-        }
+    fn consensus_state(&self, client_id: &ClientId, height: Height) -> Option<&AnyConsensusState> {
+        self.clients
+            .get(client_id)
+            .map(|client_record| client_record.consensus_states.get(&height))
+            .flatten()
     }
 
     fn client_counter(&self) -> u64 {
@@ -551,34 +551,16 @@ impl ClientReader for MockContext {
 }
 
 impl ClientKeeper for MockContext {
-    fn store_client_state(
+    fn store_client_and_consensus_state(
         &mut self,
         client_id: ClientId,
         client_state: AnyClientState,
-    ) -> Result<(), ICS2Error> {
-        let mut client_record = self.clients.entry(client_id).or_insert(MockClientRecord {
-            // why not store `ClientType::Mock` here as in the method below?
-            client_type: client_state.client_type(),
-            consensus_states: Default::default(),
-            client_state: Default::default(),
-        });
-
-        client_record.client_state = Some(client_state);
-        Ok(())
-    }
-
-    fn store_consensus_state(
-        &mut self,
-        client_id: ClientId,
-        height: Height,
         consensus_state: AnyConsensusState,
     ) -> Result<(), ICS2Error> {
-        let client_record = self.clients.entry(client_id).or_insert(MockClientRecord {
-            client_type: ClientType::Mock,
-            consensus_states: Default::default(),
-            client_state: Default::default(),
-        });
+        let mut client_record = self.clients.entry(client_id).or_default();
 
+        let height = client_state.latest_height();
+        client_record.client_state = Some(client_state);
         client_record
             .consensus_states
             .insert(height, consensus_state);
@@ -597,7 +579,7 @@ impl ICS18Context for MockContext {
 
     fn query_client_full_state(&self, client_id: &ClientId) -> Option<AnyClientState> {
         // Forward call to ICS2.
-        ClientReader::client_state(self, client_id)
+        ClientReader::client_state(self, client_id).cloned()
     }
 
     fn query_latest_header(&self) -> Option<AnyHeader> {

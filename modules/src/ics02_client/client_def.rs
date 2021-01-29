@@ -194,6 +194,7 @@ impl AnyClientState {
             Self::Mock(mock_state) => mock_state.latest_height(),
         }
     }
+
     pub fn client_type(&self) -> ClientType {
         match self {
             Self::Tendermint(state) => state.client_type(),

@@ -30,6 +30,16 @@ pub struct MockClientRecord {
     pub consensus_states: HashMap<Height, AnyConsensusState>,
 }
 
+impl Default for MockClientRecord {
+    fn default() -> Self {
+        Self {
+            client_type: ClientType::Mock,
+            client_state: Default::default(),
+            consensus_states: Default::default(),
+        }
+    }
+}
+
 /// A mock of a client state. For an example of a real structure that this mocks, you can see
 /// `ClientState` of ics07_tendermint/client_state.rs.
 // TODO: `MockClientState` should evolve, at the very least needs a `is_frozen` boolean field.
