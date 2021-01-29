@@ -4,8 +4,8 @@ use ibc::events::IBCEvent;
 use ibc::ics04_channel::channel::Order;
 use ibc::ics24_host::identifier::{ChainId, ChannelId, ClientId, ConnectionId, PortId};
 use ibc::Height;
-use relayer::channel::{Channel, ChannelSide};
-use relayer::config::StoreConfig;
+use ibc_relayer::channel::{Channel, ChannelSide};
+use ibc_relayer::config::StoreConfig;
 
 use crate::commands::cli_utils::{ChainHandlePair, SpawnOptions};
 use crate::conclude::Output;
@@ -56,14 +56,17 @@ macro_rules! tx_chan_cmd {
                     &self.dst_chain_id,
                 ) {
                     Ok(chains) => chains,
-                    Err(e) => return Output::error(format!("{}", e)).exit(),
+                    Err(e) => return Output::error(format!("channel {}", e)).exit(),
                 };
 
                 // Retrieve the connection
-                let dst_connection = chains
+                let dst_connection = match chains
                     .dst
                     .query_connection(&self.dst_connection_id, Height::default())
-                    .unwrap();
+                {
+                    Ok(connection) => connection,
+                    Err(e) => return Output::error(format!("channel {}", e)).exit(),
+                };
 
                 let channel = Channel {
                     ordering: self.ordering,
@@ -90,7 +93,7 @@ macro_rules! tx_chan_cmd {
 
                 match res {
                     Ok(receipt) => Output::success(receipt).exit(),
-                    Err(e) => Output::error(format!("{:?}", e)).exit(),
+                    Err(e) => Output::error(format!("channel {}", e)).exit(),
                 }
             }
         }
