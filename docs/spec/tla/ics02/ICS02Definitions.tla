@@ -2,25 +2,14 @@
 
 EXTENDS Integers, FiniteSets
 
-(********************* TYPE ANNOTATIONS FOR APALACHE ***********************)
-\* operator for type annotations
-a <: b == a
+\* set of all datagrams
+\* Datagrams(ClientIds) == 
 
-\* client datagram type
-DatagramType == [
-    type |-> STRING,
-    clientId |-> STRING,
-    height |-> Int   
+\* set of all client data
+ClientData(ClientIds, Heights) == [
+    clientId: ClientIds,
+    height: Heights
 ]
-AsDatagram(datagram) == datagram <: DatagramType
-
-\* client data and client map types
-ClientDataType == [
-    height |-> Int
-]
-ClientMapType(ClientIds) == [
-    ClientIds -> SUBSET ClientDataType
-]
-AsClientMap(clientMap, ClientIds) ==  clientMap <: ClientMapType(ClientIds)
+Clients(ClientIds, Heights) == SUBSET ClientData(ClientIds, Heights)
 
 =============================================================================
