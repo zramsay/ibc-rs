@@ -13,17 +13,15 @@ VARIABLES chainAstore, \* chain store of ChainA
           chainBstore, \* chain store of ChainB
           incomingDatagramsChainA, \* set of client datagrams incoming to ChainA
           incomingDatagramsChainB, \* set of client datagrams incoming to ChainB
-          relayerHeights, \* the client heights of the relayer
           outgoingDatagrams \* sets of client datagrams outgoing of the relayer
           
 vars == <<chainAstore, chainBstore, 
           incomingDatagramsChainA, incomingDatagramsChainB,
-          relayerHeights,
           outgoingDatagrams>>
           
 chainAvars == <<chainAstore, incomingDatagramsChainA>>
 chainBvars == <<chainBstore, incomingDatagramsChainB>>
-relayerVars == <<relayerHeights, outgoingDatagrams>>
+relayerVars == <<outgoingDatagrams>>
 Heights == 1..MaxHeight \* set of possible heights of the chains in the system                      
       
 
@@ -32,8 +30,7 @@ Heights == 1..MaxHeight \* set of possible heights of the chains in the system
  ***************************************************************************)
 
 Relayer == INSTANCE ICS18Relayer
-            WITH relayerHeights <- relayerHeights,
-                 outgoingDatagrams <- outgoingDatagrams
+            WITH outgoingDatagrams <- outgoingDatagrams
                  
 \* We suppose there are two chains that communicate, ChainA and ChainB
 \* ChainA -- Instance of Chain.tla
@@ -77,7 +74,7 @@ SubmitDatagrams ==
     /\ incomingDatagramsChainA' = AsSetDatagrams(incomingDatagramsChainA \union outgoingDatagrams["chainA"])
     /\ incomingDatagramsChainB' = AsSetDatagrams(incomingDatagramsChainB \union outgoingDatagrams["chainB"])
     /\ outgoingDatagrams' = [chainID \in ChainIDs |-> AsSetDatagrams({})]
-    /\ UNCHANGED <<chainAstore, chainBstore, relayerHeights>>
+    /\ UNCHANGED <<chainAstore, chainBstore>>
     
 (***************************************************************************
  Specification
