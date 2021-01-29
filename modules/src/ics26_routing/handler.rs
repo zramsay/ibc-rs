@@ -18,6 +18,8 @@ use crate::ics26_routing::msgs::ICS26Envelope;
 use crate::ics26_routing::msgs::ICS26Envelope::{ICS2Msg, ICS3Msg, ICS4Msg};
 // use crate::ics04_channel::msgs::chan_open_try::test_util::get_dummy_raw_msg_chan_open_try;
 
+/// TODO: this function does two things, parsing and dispatching; it should do only one of them
+///       `dispatch` alone should not be exposed as it's not safe to use
 /// Mimics the DeliverTx ABCI interface, but a slightly lower level. No need for authentication
 /// info or signature checks here.
 /// https://github.com/cosmos/cosmos-sdk/tree/master/docs/basics
@@ -40,16 +42,16 @@ where
                 // Pop out the message and then wrap it in the corresponding type.
                 let domain_msg = create_client::MsgCreateAnyClient::decode_vec(&any_msg.value)
                     .map_err(|e| Kind::MalformedMessageBytes.context(e))?;
-                Ok(ICS2Msg(ClientMsg::CreateClient(domain_msg)))
+                ICS2Msg(ClientMsg::CreateClient(domain_msg))
             }
             update_client::TYPE_URL => {
                 let domain_msg = update_client::MsgUpdateAnyClient::decode_vec(&any_msg.value)
                     .map_err(|e| Kind::MalformedMessageBytes.context(e))?;
-                Ok(ICS2Msg(ClientMsg::UpdateClient(domain_msg)))
+                ICS2Msg(ClientMsg::UpdateClient(domain_msg))
             }
             // TODO: ICS3 messages
-            _ => Err(Kind::UnknownMessageTypeURL(any_msg.type_url)),
-        }?;
+            _ => return Err(Kind::UnknownMessageTypeURL(any_msg.type_url).into()),
+        };
 
         // Process the envelope, and accumulate any events that were generated.
         let mut output = dispatch(&mut ctx_interim, envelope)?;
