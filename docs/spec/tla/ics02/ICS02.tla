@@ -66,7 +66,7 @@ Next ==
  Invariants
  ***************************************************************************)
 
-TypeOk ==
+TypeOK ==
     /\ nextClientId \in ClientIds \union { MaxClientId + 1 }
     /\ clients \in Clients(ClientIds, Heights)
 
