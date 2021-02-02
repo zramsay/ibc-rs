@@ -20,45 +20,57 @@ VARIABLE outcome
 ClientIds == 1..MaxClientId
 \* set of possible heights
 Heights == 1..MaxHeight
+\* if a client has a null height then the client does not exist
+NullHeight == 0
 \* set of possible outcomes
-Outcomes == {"Null", "CreateOK", "UpdateClientNotFound", "UpdateHeaderVerificationFailure", "ModelError"}
+Outcomes == {"Null", "CreateOK", "UpdateOK", "UpdateClientNotFound", "UpdateHeightVerificationFailure", "ModelError"}
+
+\* check if a client exists
+ClientExists(clientId) ==
+    clients[clientId] /= NullHeight
+
+SetClientHeight(clientId, clientHeight) ==
+    [clients EXCEPT ![clientId] = clientHeight]
 
 CreateClient(clientHeight) ==
-    \* add a new client at height `clientHeight` with `nextClientId` as identifier
-    /\ clients' = clients \union {[clientId |-> nextClientId, height |-> clientHeight]}
-    \* update `nextClientId`
-    /\ nextClientId' = nextClientId + 1
-    \* update `outcome`
-    /\ outcome' = "CreateOK"
+    \* check if the client exists (it shouldn't)
+    IF ClientExists(nextClientId) THEN
+        \* if the client to be created already exists,
+        \* then there's an error in the model
+        /\ outcome' = "ModelError"
+        /\ UNCHANGED <<clients, nextClientId>>
+    ELSE
+        \* set the new client's height to `clientHeight`
+        /\ clients' = SetClientHeight(nextClientId, clientHeight)
+        \* update `nextClientId`
+        /\ nextClientId' = nextClientId + 1
+        \* set `outcome`
+        /\ outcome' = "CreateOK"
 
 CreateClientNext ==
-    \* create client if the model constant `MaxClientId` allows it
+    \* only create client if the model constant `MaxClientId` allows it
     /\ nextClientId < MaxClientId
-    \* select a height for the client to be created
+    \* select a height for the client to be created at
     /\ \E clientHeight \in Heights:
         CreateClient(clientHeight)
 
 UpdateClient(clientId, clientHeight) ==
-    \* find the client to be updated
-    LET find == {client \in clients : client.clientId = clientId} IN
-    LET findCount == Cardinality(find) IN
     \* check if the client exists
-    IF findCount = 0 THEN
-        \* if the client does not exist, then return an error
-        /\ outcome' = "UpdateClientNotFound"
-        /\ UNCHANGED <<clients, nextClientId>>
-    ELSE IF findCount = 1 THEN
+    IF ClientExists(clientId) THEN
         \* if the client exists, check its height
-        CHOOSE client \in clients: TRUE
-        /\ IF client.height < clientHeight THEN
+        IF clients[clientId] < clientHeight THEN
             \* if its height is lower than the one being updated to
             \* then, update the client
-            UNCHANGED <<outcome, clients, nextClientId>>
-           ELSE
-            UNCHANGED <<outcome, clients, nextClientId>>
+            /\ clients' = SetClientHeight(clientId, clientHeight)
+            \* set `outcome`
+            /\ outcome' = "UpdateOK"
+            /\ UNCHANGED <<nextClientId>>
+        ELSE
+            /\ outcome' = "UpdateHeightVerificationFailure"
+            /\ UNCHANGED <<clients, nextClientId>>
     ELSE
-        \* this case is not possible
-        /\ outcome' = "ModelError"
+        \* if the client does not exist, then return an error
+        /\ outcome' = "UpdateClientNotFound"
         /\ UNCHANGED <<clients, nextClientId>>
 
 UpdateClientNext ==
@@ -73,7 +85,7 @@ UpdateClientNext ==
  ***************************************************************************)
 
  Init ==
-    /\ clients = AsClients({})
+    /\ clients = [ clientId \in ClientIds |-> NullHeight ]
     /\ nextClientId = 1
     /\ outcome = "Null"
 
@@ -88,22 +100,11 @@ Next ==
 
 TypeOK ==
     /\ nextClientId \in ClientIds \union { MaxClientId + 1 }
-    /\ clients \in Clients(ClientIds, Heights)
+    \* /\ clients \in Clients(ClientIds, Heights)
     /\ outcome \in Outcomes
 
 \* the model never erros
 ModelNeverErrors ==
     outcome /= "ModelError"
-
-\* the client identifiers created are smaller than `nextClientId`
-ClientIdsAllowed ==
-    \A client \in clients:
-        client.clientId < nextClientId
-
-\* if two clients have the same identifier, then they are the same
-ClientIdsUnique ==
-    \A client1 \in clients:
-        \A client2 \in clients:
-            client1.clientId = client2.clientId => client1 = client2
 
 =============================================================================

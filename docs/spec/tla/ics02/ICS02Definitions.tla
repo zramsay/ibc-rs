@@ -17,6 +17,7 @@ ClientData(ClientIds, Heights) == [
     clientId: ClientIds,
     height: Heights
 ]
-Clients(ClientIds, Heights) == SUBSET ClientData(ClientIds, Heights)
+Clients(ClientIds, Heights) == [ClientIds -> Heights]
+\* SUBSET ClientData(ClientIds, Heights)
 
 =============================================================================
