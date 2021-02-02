@@ -1,6 +1,6 @@
 --------------------------- MODULE ICS02 ----------------------------
 
-EXTENDS Integers, FiniteSets, ICS02Definitions
+EXTENDS Integers, FiniteSets
 
 \* max client identifier
 CONSTANT MaxClientId
@@ -13,8 +13,10 @@ ASSUME MaxHeight > 0
 VARIABLE clients
 \* counter used to generate client identifiers
 VARIABLE nextClientId
+\* last action performed
+VARIABLE action
 \* string with the outcome of the last operation
-VARIABLE outcome
+VARIABLE actionOutcome
 
 \* set of possible client identifiers
 ClientIds == 1..MaxClientId
@@ -22,8 +24,22 @@ ClientIds == 1..MaxClientId
 Heights == 1..MaxHeight
 \* if a client has a null height then the client does not exist
 NullHeight == 0
+\* set of possible actions
+NullActions == [
+    type: {"Null"}
+]
+CreateClientActions == [
+    type: {"CreateClient"},
+    height: Heights
+]
+UpdateClientActions == [
+    type: {"UpdateClient"},
+    clientId: ClientIds,
+    height: Heights
+]
+Actions == NullActions \union CreateClientActions \union UpdateClientActions
 \* set of possible outcomes
-Outcomes == {"Null", "CreateOK", "UpdateOK", "UpdateClientNotFound", "UpdateHeightVerificationFailure", "ModelError"}
+ActionOutcomes == {"Null", "CreateOK", "UpdateOK", "UpdateClientNotFound", "UpdateHeightVerificationFailure", "ModelError"}
 
 \* check if a client exists
 ClientExists(clientId) ==
@@ -37,7 +53,7 @@ CreateClient(clientHeight) ==
     IF ClientExists(nextClientId) THEN
         \* if the client to be created already exists,
         \* then there's an error in the model
-        /\ outcome' = "ModelError"
+        /\ actionOutcome' = "ModelError"
         /\ UNCHANGED <<clients, nextClientId>>
     ELSE
         \* set the new client's height to `clientHeight`
@@ -45,14 +61,7 @@ CreateClient(clientHeight) ==
         \* update `nextClientId`
         /\ nextClientId' = nextClientId + 1
         \* set `outcome`
-        /\ outcome' = "CreateOK"
-
-CreateClientNext ==
-    \* only create client if the model constant `MaxClientId` allows it
-    /\ nextClientId < MaxClientId
-    \* select a height for the client to be created at
-    /\ \E clientHeight \in Heights:
-        CreateClient(clientHeight)
+        /\ actionOutcome' = "CreateOK"
 
 UpdateClient(clientId, clientHeight) ==
     \* check if the client exists
@@ -62,49 +71,63 @@ UpdateClient(clientId, clientHeight) ==
             \* if its height is lower than the one being updated to
             \* then, update the client
             /\ clients' = SetClientHeight(clientId, clientHeight)
-            \* set `outcome`
-            /\ outcome' = "UpdateOK"
+            \* set outcome
+            /\ actionOutcome' = "UpdateOK"
             /\ UNCHANGED <<nextClientId>>
         ELSE
-            /\ outcome' = "UpdateHeightVerificationFailure"
+            /\ actionOutcome' = "UpdateHeightVerificationFailure"
             /\ UNCHANGED <<clients, nextClientId>>
     ELSE
         \* if the client does not exist, then return an error
-        /\ outcome' = "UpdateClientNotFound"
+        /\ actionOutcome' = "UpdateClientNotFound"
         /\ UNCHANGED <<clients, nextClientId>>
 
-UpdateClientNext ==
+CreateClientAction ==
+    \* only create client if the model constant `MaxClientId` allows it
+    /\ nextClientId < MaxClientId
+    \* select a height for the client to be created at
+    /\ \E clientHeight \in Heights:
+        /\ action' = [type |-> "CreateClient",
+                      height |-> clientHeight]
+        /\ CreateClient(clientHeight)
+
+UpdateClientAction ==
     \* select a client to be updated (which may not exist)
     \E clientId \in ClientIds:
         \* select a height for the client to be updated
         \E clientHeight \in Heights:
-            UpdateClient(clientId, clientHeight)
+            /\ action' = [type |-> "UpdateClient",
+                          clientId |-> clientId,
+                          height |-> clientHeight]
+            /\ UpdateClient(clientId, clientHeight)
 
 (***************************************************************************
  Specification
  ***************************************************************************)
 
  Init ==
-    /\ clients = [ clientId \in ClientIds |-> NullHeight ]
+    /\ clients = [clientId \in ClientIds |-> NullHeight]
     /\ nextClientId = 1
-    /\ outcome = "Null"
+    /\ action = [type |-> "Null"]
+    /\ actionOutcome = "Null"
 
 Next ==
-    \/ CreateClientNext
-    \/ UpdateClientNext
-    \/ UNCHANGED <<clients, nextClientId, outcome>>
+    \/ CreateClientAction
+    \/ UpdateClientAction
+    \/ UNCHANGED <<clients, nextClientId, action, actionOutcome>>
 
 (***************************************************************************
  Invariants
  ***************************************************************************)
 
 TypeOK ==
-    /\ nextClientId \in ClientIds \union { MaxClientId + 1 }
-    \* /\ clients \in Clients(ClientIds, Heights)
-    /\ outcome \in Outcomes
+    /\ nextClientId \in ClientIds \union {MaxClientId + 1}
+    /\ clients \in [ClientIds -> Heights \union {NullHeight}]
+    /\ action \in Actions
+    /\ actionOutcome \in ActionOutcomes
 
 \* the model never erros
 ModelNeverErrors ==
-    outcome /= "ModelError"
+    actionOutcome /= "ModelError"
 
 =============================================================================
