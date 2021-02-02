@@ -18,6 +18,18 @@ VARIABLE action
 \* string with the outcome of the last operation
 VARIABLE actionOutcome
 
+(********************* TYPE ANNOTATIONS FOR APALACHE ***********************)
+\* operator for type annotations
+a <: b == a
+
+ActionType == [
+    type |-> STRING,
+    clientId |-> Int,
+    height |-> Int
+]
+AsAction(a) == a <: ActionType
+(****************** END OF TYPE ANNOTATIONS FOR APALACHE ********************)
+
 \* set of possible client identifiers
 ClientIds == 1..MaxClientId
 \* set of possible heights
@@ -27,19 +39,24 @@ NullHeight == 0
 \* set of possible actions
 NullActions == [
     type: {"Null"}
-]
+] <: {ActionType}
 CreateClientActions == [
     type: {"CreateClient"},
     height: Heights
-]
+] <: {ActionType}
 UpdateClientActions == [
     type: {"UpdateClient"},
     clientId: ClientIds,
     height: Heights
-]
+] <: {ActionType}
 Actions == NullActions \union CreateClientActions \union UpdateClientActions
 \* set of possible outcomes
 ActionOutcomes == {"Null", "CreateOK", "UpdateOK", "UpdateClientNotFound", "UpdateHeightVerificationFailure", "ModelError"}
+
+
+(***************************************************************************
+ Specification
+ ***************************************************************************)
 
 \* check if a client exists
 ClientExists(clientId) ==
@@ -87,8 +104,8 @@ CreateClientAction ==
     /\ nextClientId < MaxClientId
     \* select a height for the client to be created at
     /\ \E clientHeight \in Heights:
-        /\ action' = [type |-> "CreateClient",
-                      height |-> clientHeight]
+        /\ action' = AsAction([type |-> "CreateClient",
+                               height |-> clientHeight])
         /\ CreateClient(clientHeight)
 
 UpdateClientAction ==
@@ -96,19 +113,15 @@ UpdateClientAction ==
     \E clientId \in ClientIds:
         \* select a height for the client to be updated
         \E clientHeight \in Heights:
-            /\ action' = [type |-> "UpdateClient",
-                          clientId |-> clientId,
-                          height |-> clientHeight]
+            /\ action' = AsAction([type |-> "UpdateClient",
+                                   clientId |-> clientId,
+                                   height |-> clientHeight])
             /\ UpdateClient(clientId, clientHeight)
-
-(***************************************************************************
- Specification
- ***************************************************************************)
 
  Init ==
     /\ clients = [clientId \in ClientIds |-> NullHeight]
     /\ nextClientId = 1
-    /\ action = [type |-> "Null"]
+    /\ action = AsAction([type |-> "Null"])
     /\ actionOutcome = "Null"
 
 Next ==
