@@ -1,6 +1,6 @@
 --------------------------- MODULE IBC ----------------------------
 
-EXTENDS Integers, FiniteSets, IBCDefinitions
+EXTENDS Integers, FiniteSets
 
 \* ids of existing chains
 CONSTANT ChainIds
