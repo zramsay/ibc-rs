@@ -10,7 +10,7 @@ grpc_addr = 'tcp://localhost:9090'
 account_prefix = 'cosmos'
 key_name = 'testkey'
 store_prefix = 'ibc'
-gas = 3000000
+gas = 200000
 clock_drift = '5s'
 trusting_period = '14days'
 
@@ -50,7 +50,7 @@ grpc_addr = 'tcp://localhost:9091'
 account_prefix = 'cosmos'
 key_name = 'testkey'
 store_prefix = 'ibc'
-gas = 3000000
+gas = 200000
 clock_drift = '5s'
 trusting_period = '14days'
 
@@ -122,4 +122,3 @@ trusted_height = '4'
 [chains.peers.light_clients.store]
 type = 'disk'
 path = '/home/vitor.enes/ibc-rs/data/ibc-2/data/A885BB3D3DFF6101188B462466AE926E7A6CD51E'
-
